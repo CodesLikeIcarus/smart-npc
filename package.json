@@ -1,0 +1,29 @@
+{
+  "name": "@metaversalcorp/smart-npc",
+  "version": "0.1.0",
+  "description": "Smart NPC – AI-powered conversational avatar for RP1 Open Metaverse",
+  "type": "module",
+  "main": "deploy/app.js",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "dev": "node scripts/dev-server.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "serve": "http-server ./deploy -p 8080 --cors -c-1",
+    "clean": "rm -rf deploy/*.js deploy/*.map"
+  },
+  "author": "Metaversal Corporation",
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.3.2",
+    "vitest": "^4.0.18",
+    "ws": "^8.19.0"
+  },
+  "optionalDependencies": {
+    "chokidar": "^3.5.3",
+    "http-server": "^14.1.1"
+  }
+}

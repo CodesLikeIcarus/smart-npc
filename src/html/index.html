@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" data-bs-theme="light">
+
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+   <title>RP1 Demo - Login Interface</title>
+
+   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+   <link rel="preconnect" href="https://fonts.googleapis.com/">
+   <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin="">
+   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap" rel="stylesheet">
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+      integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
+      crossorigin="anonymous" referrerpolicy="no-referrer">
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css"
+      integrity="sha512-jnSuA4Ss2PkkikSOLtYs8BlYIeeIK1h99ty4YfvRPAlzr377vr3CXDb7sb7eEEBYjDtcYj+AjBH3FLv5uSJuXg=="
+      crossorigin="anonymous" referrerpolicy="no-referrer">
+
+   <style>
+      #canvas {
+         -webkit-touch-callout: none;
+         -webkit-user-select: none;
+         -khtml-user-select: none;
+         -moz-user-select: none;
+         -ms-user-select: none;
+         user-select: none;
+         touch-action: none;
+         width: 100%;
+         height: 100%;
+         display: none;
+         background: black;
+         position: absolute;
+         left: 0;
+         top: 0;
+      }
+
+      #login-overlay {
+         pointer-events: auto;
+         position: absolute;
+         width: 100%;
+         height: 100%;
+         left: 0;
+         top: 0;
+      }
+
+      .tray_root,
+      #endpoint-view {
+         pointer-events: auto;
+      }
+
+      .window {
+         height: 100%;
+         overflow-y: auto;
+         display: flex;
+         flex-direction: column;
+         justify-content: safe center;
+      }
+
+      .tray_root {
+         position: relative;
+         z-index: 2;
+         display: flex;
+         flex-direction: column;
+         align-items: center;
+      }
+
+      .tray_root>h1 {
+         text-align: center;
+         left: 0;
+         width: 100%;
+      }
+
+      fragment {
+         max-width: 100% !important;
+      }
+
+      @media only screen and (min-width: 480px) {
+         .tray-root {
+            margin: 3rem 0;
+         }
+      }
+
+      @media only screen and (max-width: 480px) {
+         .card.rounded-5 {
+            border-radius: 0 !important;
+         }
+      }
+
+      .card-header {
+         padding: 0 !important;
+      }
+
+      .form-input_error {
+         white-space: pre-line;
+      }
+
+      .intro-anim-loading {
+         display: none;
+      }
+
+      /* Status output panel styles */
+      #status-panel {
+         position: fixed;
+         bottom: 0;
+         left: 0;
+         right: 0;
+         background: #f8f9fa;
+         border-top: 2px solid #dee2e6;
+         padding: 15px;
+         max-height: 280px;
+         overflow-y: auto;
+         font-family: 'Courier New', monospace;
+         font-size: 12px;
+         z-index: 50;
+         box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      #status-panel h6 {
+         margin: 0 0 10px 0;
+         font-size: 13px;
+         font-weight: 600;
+         color: #333;
+         display: flex;
+         align-items: center;
+         gap: 8px;
+         justify-content: space-between;
+      }
+
+      #status-panel .status-badge {
+         display: inline-block;
+         padding: 3px 8px;
+         border-radius: 12px;
+         font-size: 11px;
+         font-weight: 500;
+      }
+
+      #status-panel .status-badge.success {
+         background-color: #d4edda;
+         color: #155724;
+      }
+
+      #status-panel .status-badge.pending {
+         background-color: #fff3cd;
+         color: #856404;
+      }
+
+      #status-panel .status-badge.error {
+         background-color: #f8d7da;
+         color: #721c24;
+      }
+
+      #status-panel .status-badge.logged-in {
+         background-color: #cfe2ff;
+         color: #084298;
+      }
+
+      #status-panel .status-badge.refresh-required {
+         background-color: #f8d7da;
+         color: #721c24;
+      }
+
+      #status-content {
+         background-color: white;
+         border: 1px solid #dee2e6;
+         border-radius: 4px;
+         padding: 10px;
+         max-height: 200px;
+         overflow-y: auto;
+         white-space: pre-wrap;
+         word-wrap: break-word;
+         color: #666;
+         line-height: 1.4;
+      }
+
+      #status-content .token-item {
+         margin-bottom: 8px;
+         padding: 8px;
+         background-color: #f0f0f0;
+         border-left: 3px solid #007bff;
+         border-radius: 2px;
+      }
+
+      #status-content .token-item .label {
+         font-weight: 600;
+         color: #333;
+      }
+
+      #status-content .token-item .value {
+         color: #555;
+         word-break: break-all;
+         font-size: 11px;
+         margin-top: 4px;
+      }
+
+      #status-content .transaction-item {
+         margin-bottom: 8px;
+         padding: 8px;
+         background-color: #e8f4f8;
+         border-left: 3px solid #17a2b8;
+         border-radius: 2px;
+      }
+
+      #status-content .transaction-item .label {
+         font-weight: 600;
+         color: #0c5460;
+      }
+
+      #status-content .transaction-item .value {
+         color: #0c5460;
+         word-break: break-all;
+         font-size: 11px;
+         margin-top: 4px;
+         max-height: 100px;
+         overflow-y: auto;
+      }
+
+      body {
+         padding-bottom: 280px;
+      }
+
+      .status-panel-buttons {
+         margin-top: 10px;
+         display: flex;
+         gap: 8px;
+      }
+
+      .clear-status-btn,
+      .logout-btn {
+         padding: 5px 10px;
+         font-size: 11px;
+         cursor: pointer;
+      }
+
+      #login-section {
+         transition: opacity 0.3s ease;
+      }
+
+      #login-section.hidden {
+         display: none;
+      }
+
+      .user-info-panel {
+         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+         color: white;
+         padding: 20px;
+         border-radius: 8px;
+         margin-bottom: 20px;
+         text-align: center;
+      }
+
+      .user-info-panel h3 {
+         margin: 0 0 10px 0;
+         font-size: 24px;
+      }
+
+      .user-info-panel p {
+         margin: 5px 0;
+         font-size: 14px;
+         opacity: 0.9;
+      }
+
+      .teleport-panel {
+         background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+         color: white;
+         padding: 20px;
+         border-radius: 8px;
+         margin-bottom: 20px;
+      }
+
+      .teleport-panel h5 {
+         margin: 0 0 15px 0;
+         font-size: 18px;
+         display: flex;
+         align-items: center;
+         gap: 8px;
+      }
+
+      .teleport-form-group {
+         margin-bottom: 12px;
+      }
+
+      .teleport-form-group label {
+         display: block;
+         font-size: 12px;
+         font-weight: 600;
+         margin-bottom: 5px;
+         opacity: 0.95;
+      }
+
+      .teleport-form-group input {
+         width: 100%;
+         padding: 8px 12px;
+         border: none;
+         border-radius: 4px;
+         font-size: 13px;
+         background: rgba(255, 255, 255, 0.9);
+         color: #333;
+      }
+
+      .teleport-form-group input:focus {
+         outline: none;
+         background: white;
+         box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+      }
+
+      .teleport-form-row {
+         display: grid;
+         grid-template-columns: 1fr 1fr;
+         gap: 12px;
+      }
+
+      .teleport-form-row-4 {
+         display: grid;
+         grid-template-columns: 1fr 1.5fr 1.5fr 2fr;
+         gap: 8px;
+         margin-bottom: 12px;
+      }
+
+      .teleport-buttons-row {
+         display: flex;
+         gap: 8px;
+         margin-top: 10px;
+      }
+
+      .teleport-buttons-row .teleport-button {
+         flex: 1;
+         margin-top: 0;
+      }
+
+      .teleport-button {
+         background: rgba(255, 255, 255, 0.2);
+         color: white;
+         border: 2px solid rgba(255, 255, 255, 0.5);
+         padding: 10px 16px;
+         border-radius: 4px;
+         font-size: 13px;
+         font-weight: 600;
+         cursor: pointer;
+         transition: all 0.3s ease;
+         width: 100%;
+         margin-top: 10px;
+      }
+
+      .teleport-button:hover {
+         background: rgba(255, 255, 255, 0.3);
+         border-color: rgba(255, 255, 255, 0.8);
+         color: white;
+      }
+
+      .teleport-button:active {
+         transform: scale(0.98);
+      }
+
+      .location-preset {
+         display: inline-block;
+         background: rgba(255, 255, 255, 0.15);
+         border: 1px solid rgba(255, 255, 255, 0.4);
+         color: white;
+         padding: 6px 12px;
+         border-radius: 4px;
+         font-size: 12px;
+         cursor: pointer;
+         margin-right: 8px;
+         margin-top: 8px;
+         transition: all 0.2s ease;
+      }
+
+      .location-preset:hover {
+         background: rgba(255, 255, 255, 0.25);
+         border-color: rgba(255, 255, 255, 0.6);
+      }
+
+      .current-location-display {
+         background: rgba(0, 0, 0, 0.2);
+         border: 1px solid rgba(255, 255, 255, 0.3);
+         border-radius: 4px;
+         padding: 12px;
+         margin-top: 15px;
+         font-size: 12px;
+      }
+
+      .current-location-display .label {
+         font-weight: 600;
+         margin-bottom: 5px;
+      }
+
+      .current-location-display .value {
+         font-family: 'Courier New', monospace;
+         font-size: 11px;
+         opacity: 0.9;
+      }
+
+      .coordinates-display {
+         background: rgba(0, 0, 0, 0.3);
+         border-radius: 4px;
+         padding: 10px;
+         margin-top: 8px;
+         font-family: 'Courier New', monospace;
+         font-size: 11px;
+      }
+
+      /* ── Audio Visualizer ─────────────────────────────────────────────────── */
+
+      .teleport-panel-inner {
+         display: grid;
+         grid-template-columns: 2fr 1fr;
+         gap: 16px;
+         align-items: flex-start;
+      }
+
+      .teleport-controls-col {
+         min-width: 0;
+      }
+
+      .audio-visualizer-col {
+         display: flex;
+         flex-direction: column;
+         align-items: center;
+         gap: 6px;
+      }
+
+      .audio-visualizer-container {
+         width: 280px;
+         height: 240px;
+         background: rgba(0, 0, 0, 0.45);
+         border-radius: 4px;
+         border: 1px solid rgba(255, 255, 255, 0.2);
+         overflow: hidden;
+         position: relative;
+      }
+
+      .audio-visualizer-canvas {
+         width: 100%;
+         height: 100%;
+         display: block;
+      }
+
+      .visualizer-title {
+         font-size: 13px;
+         font-weight: 700;
+         opacity: 0.9;
+         text-transform: uppercase;
+         letter-spacing: 0.06em;
+         text-align: center;
+         font-family: 'Roboto', sans-serif;
+      }
+
+      /* Stack vertically on narrow screens */
+      @media (max-width: 480px) {
+         .teleport-panel-inner {
+            grid-template-columns: 1fr;
+         }
+
+         .audio-visualizer-col {
+            width: 100%;
+            align-items: stretch;
+         }
+
+         .audio-visualizer-container {
+            width: 100%;
+            height: 120px;
+         }
+      }
+
+      /* ── Proximity Avatar Table ───────────────────────────────────────────── */
+
+      .proximity-container {
+         margin-top: 10px;
+         padding: 10px;
+         background: rgba(0, 0, 0, 0.35);
+         border-radius: 4px;
+         border: 1px solid rgba(255, 255, 255, 0.15);
+         width: 280px;
+      }
+
+      .proximity-header {
+         font-weight: bold;
+         font-size: 12px;
+         margin-bottom: 8px;
+         color: rgba(255, 255, 255, 0.9);
+         text-transform: uppercase;
+         letter-spacing: 0.06em;
+      }
+
+      .proximity-table {
+         width: 100%;
+         border-collapse: collapse;
+         font-size: 11px;
+      }
+
+      .proximity-table th {
+         background: rgba(255, 255, 255, 0.15);
+         padding: 4px 6px;
+         text-align: left;
+         border: 1px solid rgba(255, 255, 255, 0.2);
+         font-weight: 600;
+         color: rgba(255, 255, 255, 0.85);
+      }
+
+      .proximity-table td {
+         padding: 3px 6px;
+         border: 1px solid rgba(255, 255, 255, 0.1);
+         color: rgba(255, 255, 255, 0.8);
+      }
+
+      .proximity-table tr:nth-child(even) td {
+         background: rgba(255, 255, 255, 0.05);
+      }
+
+      .proximity-table tr:hover td {
+         background: rgba(0, 234, 255, 0.1);
+      }
+
+      .proximity-id {
+         font-weight: bold;
+         width: 60px;
+         font-family: 'Courier New', monospace;
+      }
+
+      .proximity-name {
+         max-width: 120px;
+         overflow: hidden;
+         text-overflow: ellipsis;
+         white-space: nowrap;
+      }
+
+      .proximity-distance {
+         width: 60px;
+         text-align: right;
+         font-family: 'Courier New', monospace;
+      }
+
+      .proximity-empty {
+         color: rgba(255, 255, 255, 0.5);
+         font-size: 11px;
+         padding: 6px 0;
+      }
+
+      /* Stack proximity table below visualizer on narrow screens */
+      @media (max-width: 480px) {
+         .proximity-container {
+            width: 100%;
+         }
+      }
+
+      /* ── Speech-to-Text Demo ─────────────────────────────────────────────── */
+
+      .proximity-list {
+         background-color: #001a00;
+         border: 2px solid #00ff00;
+         border-radius: 4px;
+         padding: 12px;
+         font-family: 'Courier New', monospace;
+         font-size: 12px;
+         color: #00ff00;
+         width: 280px;
+         text-shadow: 0 0 4px rgba(0, 255, 0, 0.5);
+      }
+
+      .proximity-header {
+         font-weight: bold;
+         margin-bottom: 8px;
+         border-bottom: 1px solid #00ff00;
+         padding-bottom: 4px;
+      }
+
+      .proximity-row {
+         display: flex;
+         justify-content: space-between;
+         padding: 4px 0;
+         font-size: 11px;
+      }
+
+      .proximity-id {
+         color: #00aa00;
+         min-width: 40px;
+      }
+
+      .proximity-name {
+         flex: 1;
+         padding: 0 12px;
+         overflow: hidden;
+         text-overflow: ellipsis;
+         white-space: nowrap;
+      }
+
+      .proximity-distance {
+         color: #00ff00;
+         min-width: 60px;
+         text-align: right;
+      }
+
+      /* ── Speech-to-Text Demo (original section) ──────────────────────────── */
+
+      .stt-panel {
+         margin-top: 8px;
+         background: linear-gradient(135deg, rgba(0, 10, 30, 0.92) 0%, rgba(0, 45, 85, 0.88) 100%);
+         border: 1px solid rgba(0, 234, 255, 0.35);
+         border-radius: 8px;
+         padding: 16px;
+         color: #e8f4ff;
+         width: 100%;
+         font-family: 'Roboto', sans-serif;
+      }
+
+      .stt-panel h6 {
+         font-size: 14px;
+         font-weight: 700;
+         text-transform: uppercase;
+         letter-spacing: 0.08em;
+         color: #00eaff;
+         margin-bottom: 10px;
+      }
+
+      .stt-controls {
+         display: flex;
+         gap: 8px;
+         flex-wrap: wrap;
+         margin-bottom: 10px;
+      }
+
+      .stt-controls button {
+         font-size: 13px;
+         padding: 5px 14px;
+         font-family: 'Roboto', sans-serif;
+      }
+
+      .stt-status {
+         font-size: 14px;
+         font-family: 'Roboto', sans-serif;
+         opacity: 0.85;
+         margin-bottom: 8px;
+      }
+
+      .stt-status span {
+         font-weight: 700;
+         color: #ff00cc;
+      }
+
+      .stt-buffer-info {
+         font-size: 14px;
+         font-family: 'Roboto', sans-serif;
+         opacity: 0.85;
+      }
+
+      .stt-frame-info {
+         font-size: 14px;
+         font-family: 'Roboto', sans-serif;
+         opacity: 0.9;
+         margin-top: 6px;
+         display: flex;
+         align-items: center;
+         gap: 6px;
+      }
+
+      .stt-live-dot {
+         display: inline-block;
+         width: 9px;
+         height: 9px;
+         border-radius: 50%;
+         background: #ff4444;
+         animation: stt-pulse 1s ease-in-out infinite;
+         flex-shrink: 0;
+      }
+
+      @keyframes stt-pulse {
+
+         0%,
+         100% {
+            opacity: 1;
+            transform: scale(1);
+         }
+
+         50% {
+            opacity: 0.3;
+            transform: scale(0.75);
+         }
+      }
+
+      /* ── Lat/Lon fine-tuning controls ────────────────────────────────────── */
+
+      .lat-lon-controls {
+         display: flex;
+         align-items: center;
+         gap: 0;
+      }
+
+      .lat-lon-controls input {
+         flex: 1;
+         min-width: 0;
+         width: auto !important;
+      }
+
+      .lat-lon-btn {
+         background: rgba(255, 255, 255, 0.18);
+         color: white;
+         border: 2px solid rgba(255, 255, 255, 0.45);
+         border-radius: 4px;
+         padding: 6px 11px;
+         font-size: 16px;
+         font-weight: 700;
+         cursor: pointer;
+         transition: all 0.2s ease;
+         flex-shrink: 0;
+         line-height: 1;
+      }
+
+      .lat-lon-btn:hover {
+         background: rgba(255, 255, 255, 0.32);
+         border-color: rgba(255, 255, 255, 0.8);
+      }
+
+      .lat-lon-btn:active {
+         transform: scale(0.93);
+      }
+
+      /* ── Avatar update toggle button states ──────────────────────────────── */
+
+      .teleport-button.active {
+         background: rgba(255, 255, 255, 0.88);
+         color: #c0392b;
+         border-color: white;
+         animation: btn-pulse 1.5s ease-in-out infinite;
+      }
+
+      .teleport-button.active:hover {
+         background: white;
+         color: #e74c3c;
+      }
+
+       @keyframes btn-pulse {
+
+          0%,
+          100% {
+             box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.45);
+          }
+
+          50% {
+             box-shadow: 0 0 0 9px rgba(255, 255, 255, 0);
+          }
+       }
+
+       .stt-transcript-panel {
+          background: linear-gradient(135deg, rgba(0, 10, 30, 0.92) 0%, rgba(0, 45, 85, 0.88) 100%);
+          border: 1px solid rgba(0, 234, 255, 0.35);
+          border-radius: 8px;
+          padding: 16px;
+          color: #e8f4ff;
+          margin-top: 20px;
+          font-family: 'Roboto', sans-serif;
+       }
+       .stt-transcript-panel h5 {
+          font-size: 15px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: #00eaff;
+          margin-bottom: 12px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+       }
+       .stt-api-key-row {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 12px;
+          align-items: center;
+       }
+       .stt-api-key-row input {
+          flex: 1;
+          padding: 6px 10px;
+          border-radius: 4px;
+          border: 1px solid rgba(0, 234, 255, 0.3);
+          background: rgba(0, 0, 0, 0.4);
+          color: #e8f4ff;
+          font-family: 'Courier New', monospace;
+          font-size: 12px;
+       }
+       .stt-api-key-row input::placeholder { color: rgba(232, 244, 255, 0.4); }
+       .stt-controls-row {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 12px;
+          align-items: center;
+       }
+       .stt-controls-row button { font-size: 13px; padding: 5px 14px; }
+       .stt-connection-status {
+          font-size: 12px;
+          padding: 3px 10px;
+          border-radius: 12px;
+          font-weight: 500;
+       }
+       .stt-connection-status.off {
+          background: rgba(255,255,255,0.1);
+          color: rgba(255,255,255,0.5);
+       }
+       .stt-connection-status.on {
+          background: rgba(0, 255, 100, 0.2);
+          color: #00ff64;
+       }
+       .stt-transcript-log {
+          background: rgba(0, 0, 0, 0.5);
+          border: 1px solid rgba(0, 234, 255, 0.2);
+          border-radius: 4px;
+          padding: 12px;
+          max-height: 300px;
+          overflow-y: auto;
+          font-family: 'Courier New', monospace;
+          font-size: 12px;
+          line-height: 1.6;
+          color: rgba(232, 244, 255, 0.8);
+       }
+       .stt-transcript-log:empty::before {
+          content: 'Transcripts will appear here once STT is enabled and nearby avatars speak...';
+          color: rgba(255,255,255,0.3);
+          font-style: italic;
+       }
+       .transcript-line { margin-bottom: 4px; }
+       .transcript-line.interim { color: rgba(0, 234, 255, 0.5); font-style: italic; }
+       .transcript-line.final { color: #00eaff; font-weight: 500; }
+       .transcript-line .ts { color: rgba(255,255,255,0.3); margin-right: 8px; font-size: 10px; }
+       .transcript-line .confidence { color: rgba(255,255,255,0.25); margin-left: 8px; font-size: 10px; }
+       .transcript-line.ai-response { color: #ff6ecf; font-weight: 500; }
+       .transcript-line .ai-label { color: #ff00cc; font-weight: 700; margin-right: 4px; }
+    </style>
+</head>
+
+<body>
+   <!-- Login Section -->
+   <div id="login-section">
+      <div id="login-overlay" class="d-flex justify-content-center">
+         <!-- View 1: Not LoggedIn route -->
+         <div id="not-logged-in-route" class="window col col-md-8 col-lg-6 col-xl-4">
+            <div class="tray_root">
+               <h1>How would you like to enter?</h1>
+               <div class="card bg-light rounded-5 w-100">
+                  <div class="card-body">
+                     <div class="row gy-4">
+                        <!-- <div class="col-6">
+                           <button class="w-100 btn btn-outline-dark py-4 py-md-3 py-lg-4" id="login-guest-button"
+                              tabindex="1">
+                              <i class="fa-solid fa-user-secret fa-2x"></i><br>As a guest
+                           </button>
+                        </div> -->
+                        <div class="col-12">
+                           <button class="w-100 btn btn-outline-dark py-4 py-md-3 py-lg-4" id="login-or-create-button"
+                              tabindex="2">
+                              <i class="fa-solid fa-id-badge fa-2x"></i><br>As a member
+                           </button>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            <div style="text-align: center;">
+               <br>OR <br>
+               <a href="https://my.rp1.com/signup" target="_blank">SIGN UP FOR FREE RP1 ACCOUNT</a>
+            </div>
+         </div>
+
+         <!-- View 2: Sign in as GUEST -->
+         <div id="guest-sign-in-route" class="window col col-md-8 col-lg-6 col-xl-4 d-none">
+            <div class="tray_root">
+               <h1>Guest Login</h1>
+               <fragment class="w-100">
+                  <div class="card bg-light rounded-5">
+                     <form id="guest-form" autocomplete="off">
+                        <div class="card-body">
+                           <h2>What should we call you?</h2>
+                           <div class="input-group">
+                              <div class="form-floating">
+                                 <input type="text" class="form-control form-control-lg" id="guest-first-name"
+                                    placeholder="First" tabindex="1" maxlength="63" required>
+                                 <label><i class="fa-solid fa-user"></i> First</label>
+                              </div>
+                              <div class="form-floating">
+                                 <input type="text" class="form-control form-control-lg" id="guest-last-name"
+                                    placeholder="Last (optional)" tabindex="2" maxlength="63">
+                                 <label><i class="fa-solid fa-user"></i> Last (optional)</label>
+                              </div>
+                           </div>
+                           <small class="terms-text text-secondary mb-3 d-block">By continuing, you agree to our <a
+                                 href="https://rp1.com/terms" target="_blank">Terms of Use</a> and <a
+                                 href="https://rp1.com/privacy" target="_blank">Privacy Policy</a></small>
+                        </div>
+                        <div class="card-footer d-flex gap-3 d-md-flex justify-content-end">
+                           <button class="btn btn-outline-dark" id="guest-cancel-button" type="button"
+                              tabindex="3">Back</button>
+                           <button class="btn btn-secondary" id="guest-join-button" type="submit" tabindex="2">Join
+                              World</button>
+                        </div>
+                     </form>
+                  </div>
+               </fragment>
+            </div>
+         </div>
+
+         <!-- View 3: Login Existing -->
+         <div id="login-route" class="window col col-md-8 col-lg-6 col-xl-4 d-none">
+            <div class="tray_root">
+               <h1>Log in</h1>
+               <fragment class="w-100">
+                  <div class="card bg-light rounded-5">
+                     <div class="card-header">
+                        <button
+                           class="btn link-secondary link-offset-3 link link-opacity-75 link-offset-2 link-underline link-opacity-100-hover link-underline-opacity-0 link-underline-opacity-100-hover"
+                           id="login-back-button" tabindex="7">
+                           <i class="fa-solid fa-chevron-left"></i> <small>Back</small>
+                        </button>
+                     </div>
+                     <form id="login-form" class="form-style-large" autocomplete="on">
+                        <div class="partial_user card-body py-2 py-xl-3">
+                           <div
+                              class="form-input form-input_text has-validation form-floating mb-4 has-label has-icon w-100">
+                              <input type="text" class="form-control form-control-lg" id="login-email"
+                                 autocomplete="username" placeholder="Email Address" tabindex="1" required>
+                              <label><i class="fa-solid fa-user"></i> Email Address</label>
+                           </div>
+                           <div
+                              class="form-input has-validation form-floating mb-4 has-label has-icon form-input_password">
+                              <input id="login-password" type="password" class="form-control form-control-lg"
+                                 placeholder="Password" tabindex="2" maxlength="31" required>
+                              <button id="vis-login-password" class="btn btn-sm" type="button"
+                                 tabindex="-1">Show</button>
+                              <label><i class="fa-solid fa-unlock-alt"></i> Password</label>
+                           </div>
+                           <div class="form-check form-switch">
+                              <input id="login-remember" type="checkbox" role="switch" class="form-check-input"
+                                 tabindex="3">
+                              <label class="form-check-label" for="login-remember">Sign me in automatically next
+                                 time</label>
+                           </div>
+                        </div>
+                        <div class="card-footer d-flex flex-wrap gap-3 justify-content-between">
+                           <div class="d-flex flex-wrap gap-3">
+                              <button class="btn btn-outline-dark" id="forgot-button" type="button"
+                                 tabindex="5">Forgot</button>
+                              <button class="btn btn-secondary" id="login-button" type="submit" tabindex="4">Log
+                                 In</button>
+                           </div>
+                        </div>
+                     </form>
+                  </div>
+               </fragment>
+            </div>
+         </div>
+
+         <!-- View 4: Persona Picker -->
+         <div id="persona-picker-route" class="window col col-md-8 col-lg-6 col-xl-4 d-none">
+            <div class="tray_root">
+               <h1>Choose Your Persona</h1>
+               <fragment class="w-100">
+                  <div class="card bg-light rounded-5">
+                     <div class="card-body">
+                        <p class="text-secondary mb-3">Select a persona to enter the world, or create a new one.</p>
+                        <div id="persona-list" class="mb-3"></div>
+                        <hr>
+                        <h6 class="mb-2"><i class="fa-solid fa-plus-circle"></i> Create New Persona</h6>
+                        <div class="input-group mb-2">
+                           <div class="form-floating">
+                              <input type="text" class="form-control" id="new-persona-first-name" placeholder="First"
+                                 maxlength="63">
+                              <label>First Name</label>
+                           </div>
+                           <div class="form-floating">
+                              <input type="text" class="form-control" id="new-persona-last-name"
+                                 placeholder="Last (optional)" maxlength="63">
+                              <label>Last Name</label>
+                           </div>
+                        </div>
+                        <button class="btn btn-outline-secondary w-100" id="create-persona-button" type="button">
+                           <i class="fa-solid fa-user-plus"></i> Create &amp; Enter
+                        </button>
+                     </div>
+                  </div>
+               </fragment>
+            </div>
+         </div>
+
+         <!-- View 5: Two-Factor Authentication -->
+         <div id="tfa-route" class="window col col-md-8 col-lg-6 col-xl-4 d-none">
+            <div class="tray_root">
+               <h1>Two-Factor Authentication</h1>
+               <fragment class="w-100">
+                  <div class="card bg-light rounded-5">
+                     <form id="tfa-form" autocomplete="off">
+                        <div class="card-body">
+                           <p class="text-secondary mb-3">
+                              <i class="fa-solid fa-shield-halved"></i>
+                              A confirmation code has been sent to your device. Enter it below to continue.
+                           </p>
+                           <div class="form-floating mb-3">
+                              <input type="text" class="form-control form-control-lg" id="tfa-code" placeholder="123456"
+                                 maxlength="8" autocomplete="one-time-code" inputmode="numeric" tabindex="1" required>
+                              <label><i class="fa-solid fa-key"></i> Confirmation Code</label>
+                           </div>
+                        </div>
+                        <div class="card-footer d-flex gap-3 justify-content-end">
+                           <button class="btn btn-secondary" id="tfa-confirm-button" type="submit"
+                              tabindex="2">Confirm</button>
+                        </div>
+                     </form>
+                  </div>
+               </fragment>
+            </div>
+         </div>
+      </div>
+   </div>
+
+   <!-- Post-Login Session View -->
+   <div id="session-section" class="d-none" style="padding: 40px 20px;">
+      <div class="container">
+         <div class="user-info-panel">
+            <h3 id="user-display-name">User</h3>
+            <p><i class="fa-solid fa-user-circle"></i> Persona Session Active</p>
+            <button class="btn btn-light btn-sm" id="logout-button-main">
+               <i class="fa-solid fa-sign-out-alt"></i> Logout
+            </button>
+         </div>
+
+         <!-- Teleport Panel -->
+         <div class="teleport-panel">
+            <h5><i class="fa-solid fa-rocket"></i> Teleport Avatar</h5>
+
+            <div class="teleport-panel-inner">
+               <!-- Left column: teleport controls -->
+               <div class="teleport-controls-col">
+
+                  <div class="teleport-form-row-4">
+                     <div class="teleport-form-group">
+                        <label>Celestial ID (pParent)</label>
+                        <input type="text" id="celestial-id" placeholder="e.g., 104" value="104">
+                     </div>
+                     <div class="teleport-form-group">
+                        <label>Latitude</label>
+                        <div class="lat-lon-controls">
+                           <button type="button" class="lat-lon-btn" id="lat-decr">−</button>
+                           <input type="number" id="teleport-latitude" placeholder="1" step="0.0001" value="1" min="-90"
+                              max="90">
+                           <button type="button" class="lat-lon-btn" id="lat-incr">+</button>
+                        </div>
+                     </div>
+                     <div class="teleport-form-group">
+                        <label>Longitude</label>
+                        <div class="lat-lon-controls">
+                           <button type="button" class="lat-lon-btn" id="lon-decr">−</button>
+                           <input type="number" id="teleport-longitude" placeholder="1" step="0.0001" value="1"
+                              min="-180" max="180">
+                           <button type="button" class="lat-lon-btn" id="lon-incr">+</button>
+                        </div>
+                     </div>
+                     <div class="teleport-form-group">
+                        <label>Radius (meters)</label>
+                        <div class="lat-lon-controls">
+                           <button type="button" class="lat-lon-btn" id="radius-decr">−</button>
+                           <input type="number" id="teleport-radius" placeholder="6371001.8" step="0.1"
+                              value="6371001.8">
+                           <button type="button" class="lat-lon-btn" id="radius-incr">+</button>
+                        </div>
+                     </div>
+                  </div>
+
+                  <div class="teleport-buttons-row">
+                     <button class="teleport-button" id="teleport-now-button">
+                        <i class="fa-solid fa-location-arrow"></i> Teleport
+                     </button>
+                     <button class="teleport-button" id="teleport-button">
+                        <i class="fa-solid fa-satellite-dish"></i> Start Avatar Updates
+                     </button>
+                  </div>
+
+                  <div style="margin-top: 12px;">
+                     <label style="display: block; font-size: 12px; margin-bottom: 8px; font-weight: 600;">Direct
+                        Teleport Locations:</label>
+                     <button type="button" class="location-preset" data-celestial="104" data-lat="1"
+                        data-lon="1.00501054" data-radius="6371001.75">RP1 Start</button>
+                     <button type="button" class="location-preset" data-celestial="104" data-lat="1" data-lon="1"
+                        data-radius="6371001.75">Plaza</button>
+                  </div>
+
+                  <div class="current-location-display">
+                     <div class="label">Current Location:</div>
+                     <div class="value">
+                        <div>Celestial (pParent): <span id="current-celestial">104</span></div>
+                        <div>Position: <span id="current-position">40.7128°N, 74.0060°W, 0m</span></div>
+                     </div>
+                     <div class="coordinates-display">
+                        <div><strong>Cartesian Coordinates:</strong></div>
+                        <div>dX: <span id="coord-dx">0.00</span></div>
+                        <div>dY: <span id="coord-dy">0.00</span></div>
+                        <div>dZ: <span id="coord-dz">0.00</span></div>
+                     </div>
+                  </div>
+
+               </div><!-- /.teleport-controls-col -->
+
+               <!-- Right column: audio waveform visualizer + capture controls -->
+               <div class="audio-visualizer-col">
+                  <div class="visualizer-title">Inbound Audio</div>
+                  <div class="audio-visualizer-container" id="audio-visualizer-container"></div>
+                  <div class="proximity-container" id="proximity-panel"></div>
+
+                  <!-- Nearby Avatars proximity list -->
+                  <div id="proximity-panel" class="proximity-list"></div>
+
+                  <!-- Inbound Audio Capture controls -->
+                  <!-- <div class="stt-panel" id="stt-panel" style="display:none;">
+                     <h6><i class="fa-solid fa-wave-square"></i> Inbound Audio Capture</h6>
+                     <div class="stt-controls">
+                        <button class="btn btn-sm btn-outline-secondary"  id="stt-enable-btn">Enable Capture</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="stt-disable-btn" disabled>Disable Capture</button>
+                        <button class="btn btn-sm btn-outline-secondary" id="stt-clear-btn">Clear Buffer</button>
+                     </div>
+                     <div class="stt-status">
+                        Status: <span id="stt-status-text">Inactive</span>
+                     </div>
+                     <div class="stt-buffer-info" id="stt-buffer-info">
+                        Buffer: — samples &nbsp;|&nbsp; Sample rate: — Hz &nbsp;|&nbsp; Channels: —
+                     </div>
+                     <div class="stt-frame-info" id="stt-frame-info" style="display:none;">
+                        <span class="stt-live-dot"></span>Updates: <span id="stt-frame-count">0</span> &nbsp;|&nbsp; <span id="stt-fps">0.0</span> fps
+                     </div> -->
+               </div><!-- /.stt-panel -->
+            </div><!-- /.audio-visualizer-col -->
+
+         </div><!-- /.teleport-panel-inner -->
+      </div>
+
+       <!-- STT Transcript Panel -->
+       <div class="stt-transcript-panel" id="stt-transcript-panel">
+           <h5><i class="fa-solid fa-microphone-lines"></i> Speech-to-Text (Nearby Avatars)</h5>
+
+           <div class="stt-controls-row">
+              <button class="btn btn-sm btn-outline-light" id="stt-start-btn">
+                 <i class="fa-solid fa-play"></i> Start Listening
+              </button>
+              <button class="btn btn-sm btn-outline-light" id="stt-stop-btn" disabled>
+                 <i class="fa-solid fa-stop"></i> Stop
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" id="stt-clear-log-btn">
+                 <i class="fa-solid fa-trash"></i> Clear
+              </button>
+              <span class="stt-connection-status off" id="stt-status-badge">Disconnected</span>
+           </div>
+
+           <div class="stt-transcript-log" id="stt-transcript-log"></div>
+        </div>
+
+        <!-- TTS Panel -->
+        <div class="stt-transcript-panel" id="tts-panel" style="margin-top: 16px;">
+           <h5><i class="fa-solid fa-volume-high"></i> Text-to-Speech (Avatar Voice)</h5>
+
+           <div class="stt-controls-row">
+              <button class="btn btn-sm btn-outline-light" id="tts-connect-btn">
+                 <i class="fa-solid fa-plug"></i> Connect TTS
+              </button>
+              <button class="btn btn-sm btn-outline-light" id="tts-disconnect-btn" disabled>
+                 <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
+              </button>
+              <select class="form-select form-select-sm" id="tts-voice-select"
+                 style="max-width: 200px; background: rgba(0,0,0,0.4); color: #e8f4ff; border: 1px solid rgba(0,234,255,0.3); font-size: 12px;">
+                 <option value="aura-2-thalia-en">Thalia (F, American)</option>
+                 <option value="aura-2-aurora-en">Aurora (F, American)</option>
+                 <option value="aura-2-pandora-en">Pandora (F, British)</option>
+                 <option value="aura-2-apollo-en">Apollo (M, American)</option>
+                 <option value="aura-2-arcas-en">Arcas (M, American)</option>
+                 <option value="aura-2-zeus-en">Zeus (M, American)</option>
+                 <option value="aura-2-draco-en">Draco (M, British)</option>
+                 <option value="aura-2-orpheus-en">Orpheus (M, American)</option>
+              </select>
+              <span class="stt-connection-status off" id="tts-status-badge">Disconnected</span>
+           </div>
+
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+               <input type="text" class="form-control form-control-sm" id="tts-text-input"
+                  placeholder="Type something for the avatar to say..."
+                  style="flex: 1; background: rgba(0,0,0,0.4); color: #e8f4ff; border: 1px solid rgba(0,234,255,0.3); font-size: 13px;">
+               <button class="btn btn-sm btn-outline-light" id="tts-speak-btn" disabled>
+                  <i class="fa-solid fa-play"></i> Speak
+               </button>
+            </div>
+
+             <div style="display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap;">
+                <button class="btn btn-sm btn-outline-warning" id="echo-toggle-btn" disabled>
+                   <i class="fa-solid fa-arrows-rotate"></i> Enable Echo Mode
+                </button>
+                <span class="stt-connection-status off" id="echo-status-badge" style="font-size: 11px;">Off</span>
+                <span style="font-size: 11px; opacity: 0.5; margin-left: 4px;">STT final &rarr; TTS speak</span>
+
+                <span style="opacity: 0.3; margin: 0 4px;">|</span>
+
+                <button class="btn btn-sm btn-outline-info" id="ai-toggle-btn" disabled>
+                   <i class="fa-solid fa-brain"></i> Enable AI Mode
+                </button>
+                <span class="stt-connection-status off" id="ai-status-badge" style="font-size: 11px;">Off</span>
+                 <span style="font-size: 11px; opacity: 0.5; margin-left: 4px;">STT &rarr; LLM &rarr; TTS</span>
+              </div>
+
+              <div style="display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(0,234,255,0.15);">
+                 <span style="font-size: 12px; font-weight: 600; color: #00eaff; min-width: 60px;">Persona:</span>
+                 <select class="form-select form-select-sm" id="persona-select"
+                    style="max-width: 220px; background: rgba(0,0,0,0.4); color: #e8f4ff; border: 1px solid rgba(0,234,255,0.3); font-size: 12px;">
+                    <option value="scenario-coach">Scenario Coach</option>
+                    <option value="assistant">Virtual Assistant</option>
+                 </select>
+                 <button class="btn btn-sm btn-outline-secondary" id="persona-reset-btn" style="font-size: 11px; padding: 3px 10px;">
+                    <i class="fa-solid fa-rotate-right"></i> Reset
+                 </button>
+                 <span style="font-size: 11px; opacity: 0.6;">State:</span>
+                 <span class="stt-connection-status off" id="persona-state" style="font-size: 11px;">Idle</span>
+                 <span style="font-size: 11px; opacity: 0.6;">Turns:</span>
+                 <span style="font-size: 11px; color: #00eaff; font-family: 'Courier New', monospace;" id="persona-turns">0</span>
+              </div>
+          </div>
+
+       <div class="card bg-light rounded-5">
+          <div class="card-header">
+             <h5 class="mb-0"><i class="fa-solid fa-database"></i> Persona Session &amp; Puppet Data</h5>
+          </div>
+          <div class="card-body">
+             <div id="session-info"
+                style="background-color: white; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; font-family: 'Courier New', monospace; font-size: 12px;">
+                Loading session data...
+             </div>
+          </div>
+       </div>
+   </div>
+   </div>
+
+   <!-- Status Panel at Bottom -->
+   <div id="status-panel">
+      <h6>
+         <div>
+            <i class="fa-solid fa-circle-info"></i>
+            Login Status
+            <span class="status-badge pending">Pending</span>
+         </div>
+         <button class="btn btn-sm btn-outline-secondary" id="clear-status-btn"
+            style="padding: 3px 8px; font-size: 11px;">Clear</button>
+      </h6>
+      <div id="status-content">Ready for login...</div>
+   </div>
+
+   <script src="./vendor/mv/MVMF.js"></script>
+   <script src="./vendor/mv/MVSB.js"></script>
+   <script src="./vendor/mv/MVXP.js"></script>
+   <script src="./vendor/mv/MVRP.js"></script>
+   <script src="./vendor/mv/MVIO.js"></script>
+   <script src="./vendor/mv/MVRest.js"></script>
+   <script src="./vendor/mv/MVRP_Fabric.js"></script>
+   <script src="./vendor/mv/MVRP_Map.js"></script>
+   <script src="./vendor/mv/MVRP_Dev.js"></script>
+
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"
+      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+      crossorigin="anonymous"></script>
+
+    <script type="module">
+       import { LoginClient } from './app.js';
+
+       document.addEventListener('DOMContentLoaded', () => {
+          const loginClient = new LoginClient(document.body);
+          window.loginClient = loginClient;
+          console.log('Smart NPC initialized — STT pipeline ready');
+       });
+    </script>
+
+</body>
+
+</html>
