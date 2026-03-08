@@ -1,9 +1,10 @@
-// MV is a global namespace populated by side-effect imports in LnG.ts.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const MV: any;
 import { createLnGClient, ILnGClient, LnGUser, LnGPersona, GUEST_EMAIL } from "../mv/LnG.js";
 import { UserSession } from "./UserSession.js";
-import { ConnectionState } from "../types/index.js";
+import { ConnectionState, fetchDestinations } from "../types/index.js";
+import type { TeleportDestination } from "../types/index.js";
+import { SUPPORTED_OBJECT_IDS } from "./InWorldSession.js";
 import { PERSONA_PRESETS } from "../persona/presets.js";
 
 /** Credentials exported so callers can reference the same type. */
@@ -37,6 +38,7 @@ export class LoginClient {
   private userSession: UserSession | null = null;
   private pendingUser: LnGUser | null = null;
   private avatarUpdateActive = false;
+  private _destinations: TeleportDestination[] = [];
 
   constructor(_container: HTMLElement) {
     this._pLnG = createLnGClient();
@@ -182,6 +184,7 @@ export class LoginClient {
 
     this.bindSTTControls();
     this.bindTTSControls();
+    void this.loadDestinations();
   }
 
   // ─── Event binding ─────────────────────────────────────────────────────────
@@ -276,16 +279,8 @@ export class LoginClient {
       this.adjustLatLon("teleport-radius", 1.0);
     });
 
-    // Location presets
-    document.querySelectorAll<HTMLElement>(".location-preset").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const celestial = btn.dataset["celestial"] ?? "";
-        const lat = btn.dataset["lat"] ?? "0";
-        const lon = btn.dataset["lon"] ?? "0";
-        const radius = btn.dataset["radius"] ?? "6371000";
-        this.setTeleportInputs(celestial, lat, lon, radius);
-        this.handleTeleport();
-      });
+    this.el("destination-go-btn")?.addEventListener("click", () => {
+      this.handleDestinationTeleport();
     });
 
     // Clear status log
@@ -482,6 +477,10 @@ export class LoginClient {
   }
 
   private sendAvatarUpdate(): void {
+    const inWorld = this.userSession?.personaSession?.inWorld;
+    if (inWorld?.resendLastPosition()) return;
+
+    // Fallback: if no cached state yet, use the manual input fields
     const celestial =
       (this.el<HTMLInputElement>("celestial-id")?.value ?? "").trim();
     const lat = parseFloat(
@@ -942,6 +941,59 @@ export class LoginClient {
 
   // ─── Teleport ──────────────────────────────────────────────────────────
 
+  private async loadDestinations(): Promise<void> {
+    const select = this.el<HTMLSelectElement>("destination-select");
+    if (!select) return;
+
+    try {
+      const allDestinations = await fetchDestinations();
+      this._destinations = allDestinations.filter((d) => {
+        if (d.location.type === 'terrestrial') return true;
+        return SUPPORTED_OBJECT_IDS.has(d.location.objectID);
+      });
+
+      select.innerHTML = '';
+      for (let i = 0; i < this._destinations.length; i++) {
+        const dest = this._destinations[i];
+        const option = document.createElement('option');
+        option.value = String(i);
+        const typeLabel = dest.location.type === 'object' ? 'obj' : 'geo';
+        option.textContent = `${dest.name} (${typeLabel})`;
+        select.appendChild(option);
+      }
+
+      this.appendStatus(`Loaded ${this._destinations.length} teleport destinations`);
+    } catch (err) {
+      select.innerHTML = '<option value="">Failed to load destinations</option>';
+      this.appendStatus(`Destinations error: ${(err as Error).message}`);
+    }
+  }
+
+  private async handleDestinationTeleport(): Promise<void> {
+    const select = this.el<HTMLSelectElement>("destination-select");
+    if (!select) return;
+
+    const idx = parseInt(select.value, 10);
+    if (isNaN(idx) || idx < 0 || idx >= this._destinations.length) {
+      this.appendStatus('Teleport: select a destination first.');
+      return;
+    }
+
+    const dest = this._destinations[idx];
+    this.appendStatus(`Teleporting to "${dest.name}"...`);
+    try {
+      await this.userSession?.teleportToDestination(dest);
+      this.appendStatus(`Teleported to "${dest.name}"`);
+
+      if (!this.avatarUpdateActive) {
+        this.handleAvatarUpdateToggle();
+        this.appendStatus('Auto-started avatar updates (required for visibility)');
+      }
+    } catch (err) {
+      this.appendStatus(`Teleport failed: ${(err as Error).message}`);
+    }
+  }
+
   private handleTeleport(): void {
     const celestial =
       (this.el<HTMLInputElement>("celestial-id")?.value ?? "").trim();
@@ -977,8 +1029,12 @@ export class LoginClient {
       elPosition.textContent = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? "N" : "S"}, ${Math.abs(lon).toFixed(4)}°${lon >= 0 ? "E" : "W"}, ${radius}m`;
     }
 
-    // Send teleport via persona puppet if in-world session is active
     this.userSession?.teleportTo(celestial, { x: dx, y: dy, z: dz });
+
+    if (!this.avatarUpdateActive) {
+      this.handleAvatarUpdateToggle();
+      this.appendStatus('Auto-started avatar updates (required for visibility)');
+    }
 
     this.appendStatus(
       `Teleport → ${celestial} lat=${lat} lon=${lon} radius=${radius}m`
