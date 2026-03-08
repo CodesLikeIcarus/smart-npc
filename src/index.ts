@@ -15,7 +15,8 @@ export type { TTSServiceOptions, TTSConnectionState } from "./ai/TTSService.js";
 export { LLMService } from "./ai/LLMService.js";
 export type { LLMServiceOptions, ChatMessage } from "./ai/LLMService.js";
 export { PersonaEngine } from "./persona/PersonaEngine.js";
-export type { PersonaDefinition, PersonaState } from "./persona/PersonaDefinition.js";
+export { ScenarioCoachEngine, SETUP_COMPLETE_MARKER } from "./persona/ScenarioCoachEngine.js";
+export type { PersonaDefinition, PersonaState, ScenarioPersonaState } from "./persona/PersonaDefinition.js";
 export { PERSONA_PRESETS, PERSONA_SCENARIO_COACH, PERSONA_ASSISTANT } from "./persona/presets.js";
 export {
   stereoToMono,

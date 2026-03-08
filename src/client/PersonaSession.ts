@@ -1,5 +1,6 @@
 import { Session } from "../base/Session.js";
-import { ConnectionState, PersonaInfo } from "../types/index.js";
+import { ConnectionState, PersonaInfo, MapModelClass } from "../types/index.js";
+import type { TeleportDestination } from "../types/index.js";
 import { InWorldSession } from "./InWorldSession.js";
 import { LoginClient } from "./LoginClient.js";
 
@@ -214,14 +215,24 @@ export class PersonaSession extends Session {
     return errors[code] ?? `UNKNOWN_ERROR_${code}`;
   }
 
-  /** Relay a teleport command to the active in-world session. */
-  public teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {
+  public teleportTo(
+    parentId: string,
+    position: { x: number; y: number; z: number },
+    wClass?: (typeof MapModelClass)[keyof typeof MapModelClass],
+  ): void {
     if (!this.inWorldSession) {
       console.error('[PersonaSession] No InWorldSession for teleport');
       return;
     }
+    this.inWorldSession.teleportTo(parentId, position, wClass);
+  }
 
-    this.inWorldSession.teleportTo(celestialId, position);
+  public async teleportToDestination(destination: TeleportDestination): Promise<void> {
+    if (!this.inWorldSession) {
+      console.error('[PersonaSession] No InWorldSession for teleport');
+      return;
+    }
+    await this.inWorldSession.teleportToDestination(destination);
   }
 
   /** Returns the active InWorldSession, or `null` if not yet in-world. */

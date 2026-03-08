@@ -8,4 +8,6 @@ export interface PersonaDefinition {
   exitPhrases: string[];
 }
 
-export type PersonaState = 'idle' | 'gathering' | 'roleplay' | 'feedback' | 'complete';
+export type PersonaState = 'idle' | 'active' | 'complete';
+
+export type ScenarioPersonaState = 'idle' | 'gathering' | 'roleplay' | 'feedback' | 'complete';

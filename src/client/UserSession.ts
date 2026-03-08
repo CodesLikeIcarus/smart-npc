@@ -1,5 +1,6 @@
 import { Session } from '../base/Session.js';
-import { ConnectionState } from '../types/index.js';
+import { ConnectionState, MapModelClass } from '../types/index.js';
+import type { TeleportDestination } from '../types/index.js';
 import { getPFabric, LnGUser, LnGPersona } from '../mv/LnG.js';
 import { PersonaSession } from './PersonaSession.js';
 import { LoginClient } from './LoginClient.js';
@@ -150,16 +151,24 @@ export class UserSession extends Session {
     this.setState(ConnectionState.Disconnected);
   }
 
-  /**
-   * Relay a teleport command to the active PersonaSession.
-   */
-  teleportTo(celestialId: string, position: { x: number; y: number; z: number }): void {
+  teleportTo(
+    parentId: string,
+    position: { x: number; y: number; z: number },
+    wClass?: (typeof MapModelClass)[keyof typeof MapModelClass],
+  ): void {
     if (!this._personaSession) {
       console.error('[UserSession] No PersonaSession for teleport');
       return;
     }
+    this._personaSession.teleportTo(parentId, position, wClass);
+  }
 
-    this._personaSession.teleportTo(celestialId, position);
+  async teleportToDestination(destination: TeleportDestination): Promise<void> {
+    if (!this._personaSession) {
+      console.error('[UserSession] No PersonaSession for destination teleport');
+      return;
+    }
+    await this._personaSession.teleportToDestination(destination);
   }
 
   /** Returns the active PersonaSession, or `null` before `pickPersona()` is called. */

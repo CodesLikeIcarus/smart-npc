@@ -1070,14 +1070,20 @@
                      </button>
                   </div>
 
-                  <div style="margin-top: 12px;">
-                     <label style="display: block; font-size: 12px; margin-bottom: 8px; font-weight: 600;">Direct
-                        Teleport Locations:</label>
-                     <button type="button" class="location-preset" data-celestial="104" data-lat="1"
-                        data-lon="1.00501054" data-radius="6371001.75">RP1 Start</button>
-                     <button type="button" class="location-preset" data-celestial="104" data-lat="1" data-lon="1"
-                        data-radius="6371001.75">Plaza</button>
-                  </div>
+                   <div style="margin-top: 12px;">
+                      <label style="display: block; font-size: 12px; margin-bottom: 8px; font-weight: 600;">
+                         Teleport Destinations:</label>
+                      <div style="display: flex; gap: 8px; align-items: center;">
+                         <select id="destination-select" class="form-select form-select-sm"
+                            style="flex: 1; background: rgba(255,255,255,0.9); color: #333; font-size: 12px; border: none; border-radius: 4px; padding: 8px;">
+                            <option value="">Loading destinations...</option>
+                         </select>
+                         <button type="button" class="teleport-button" id="destination-go-btn"
+                            style="width: auto; margin-top: 0; padding: 8px 16px; white-space: nowrap;">
+                            <i class="fa-solid fa-location-arrow"></i> Go
+                         </button>
+                      </div>
+                   </div>
 
                   <div class="current-location-display">
                      <div class="label">Current Location:</div>
