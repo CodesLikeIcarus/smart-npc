@@ -1,35 +1,14 @@
-import type { PersonaDefinition, PersonaState } from './PersonaDefinition.js';
-import { PERSONA_PRESETS, PERSONA_SCENARIO_COACH } from './presets.js';
-
-/**
- * Maximum number of gathering turns before forcing a transition to roleplay.
- * Acts as a safety ceiling so the conversation never gets stuck in gathering.
- */
-const GATHERING_MAX_TURNS = 10;
-
-/**
- * Minimum number of gathering turns required before a setup-complete signal
- * can trigger the transition. Prevents premature transitions if the LLM
- * emits the signal too early.
- */
-const GATHERING_MIN_TURNS = 3;
-
-/**
- * Marker the LLM embeds in its response when scenario setup is complete.
- * PersonaEngine scans for this to trigger gathering → roleplay.
- */
-export const SETUP_COMPLETE_MARKER = '[SETUP_COMPLETE]';
+import type { PersonaDefinition } from './PersonaDefinition.js';
+import { PERSONA_PRESETS } from './presets.js';
 
 export class PersonaEngine {
-  private _active: PersonaDefinition | null = null;
-  private _state: PersonaState = 'idle';
-  private _turnCount = 0;
-  private _setupComplete = false;
+  protected _active: PersonaDefinition | null = null;
+  protected _state: string = 'idle';
+  protected _turnCount = 0;
 
   onPersonaChanged: ((persona: PersonaDefinition) => void) | null = null;
-  onStateChanged: ((state: PersonaState, turnCount: number) => void) | null = null;
+  onStateChanged: ((state: string, turnCount: number) => void) | null = null;
   onExitDetected: ((phrase: string) => void) | null = null;
-  onTurnLimitReached: ((turnCount: number) => void) | null = null;
 
   get presets(): readonly PersonaDefinition[] {
     return PERSONA_PRESETS;
@@ -39,7 +18,7 @@ export class PersonaEngine {
     return this._active;
   }
 
-  get state(): PersonaState {
+  get state(): string {
     return this._state;
   }
 
@@ -59,8 +38,7 @@ export class PersonaEngine {
   loadPersona(persona: PersonaDefinition): void {
     this._active = persona;
     this._turnCount = 0;
-    this._state = 'gathering';
-    this._setupComplete = false;
+    this.initializeState();
     console.log(
       `[PersonaEngine] Loaded: "${persona.name}" (voice=${persona.voice}, ` +
       `maxTurns=${persona.maxTurns || 'unlimited'})`,
@@ -79,17 +57,11 @@ export class PersonaEngine {
     return preset;
   }
 
-  loadDefaultCoach(): PersonaDefinition {
-    this.loadPersona(PERSONA_SCENARIO_COACH);
-    return PERSONA_SCENARIO_COACH;
-  }
-
   unload(): void {
     const prev = this._active?.name ?? 'none';
     this._active = null;
     this._turnCount = 0;
     this._state = 'idle';
-    this._setupComplete = false;
     console.log(`[PersonaEngine] Unloaded persona (was: "${prev}")`);
     this.onStateChanged?.(this._state, this._turnCount);
   }
@@ -102,57 +74,14 @@ export class PersonaEngine {
     return this._active?.voice ?? 'aura-2-thalia-en';
   }
 
-  markSetupComplete(): void {
-    if (this._state !== 'gathering') return;
-    this._setupComplete = true;
-    console.log(`[PersonaEngine] Setup marked complete (turn ${this._turnCount})`);
-
-    if (this._turnCount >= GATHERING_MIN_TURNS) {
-      this.transitionToRoleplay('setup-complete signal');
-    }
-  }
-
-  checkResponseForSetupSignal(llmResponse: string): boolean {
-    if (this._state !== 'gathering') return false;
-    if (llmResponse.includes(SETUP_COMPLETE_MARKER)) {
-      this.markSetupComplete();
-      return true;
-    }
-    return false;
-  }
-
   recordTurn(): void {
     this._turnCount++;
-
-    if (this._state === 'gathering') {
-      if (this._setupComplete && this._turnCount >= GATHERING_MIN_TURNS) {
-        this.transitionToRoleplay('setup-complete signal + min turns met');
-      } else if (this._turnCount >= GATHERING_MAX_TURNS) {
-        console.warn(`[PersonaEngine] Gathering hit ceiling (${GATHERING_MAX_TURNS} turns) — forcing roleplay`);
-        this.transitionToRoleplay('gathering ceiling');
-      }
-    }
-
-    if (this._active?.maxTurns && this._turnCount >= this._active.maxTurns) {
-      this._state = 'feedback';
-      console.log(
-        `[PersonaEngine] Turn limit reached (${this._turnCount}/${this._active.maxTurns}) — switching to feedback`,
-      );
-      this.onStateChanged?.(this._state, this._turnCount);
-      this.onTurnLimitReached?.(this._turnCount);
-    }
-
+    this.handleTurnRecorded();
     console.log(
       `[PersonaEngine] Turn ${this._turnCount}` +
       (this._active?.maxTurns ? `/${this._active.maxTurns}` : '') +
       ` (state: ${this._state})`,
     );
-  }
-
-  private transitionToRoleplay(reason: string): void {
-    this._state = 'roleplay';
-    console.log(`[PersonaEngine] State: gathering -> roleplay (${reason}, turn ${this._turnCount})`);
-    this.onStateChanged?.(this._state, this._turnCount);
   }
 
   checkForExit(userText: string): boolean {
@@ -161,9 +90,7 @@ export class PersonaEngine {
     for (const phrase of this._active.exitPhrases) {
       if (normalized.includes(phrase)) {
         console.log(`[PersonaEngine] Exit phrase detected: "${phrase}"`);
-        this._state = 'feedback';
-        this.onStateChanged?.(this._state, this._turnCount);
-        this.onExitDetected?.(phrase);
+        this.handleExitDetected(phrase);
         return true;
       }
     }
@@ -171,34 +98,38 @@ export class PersonaEngine {
   }
 
   buildTurnAwarePrompt(): string {
-    if (!this._active) return '';
-    let prompt = this._active.systemPrompt;
-
-    if (this._state === 'gathering') {
-      prompt += `\n\n[SYSTEM NOTE: You are currently in SETUP mode. When you have gathered ALL scenario details (scenario description, character to play, personality/tone, difficulty level, and difficulty examples) and confirmed them with the user, include the exact marker ${SETUP_COMPLETE_MARKER} at the very end of your response (after your visible text). This signals the system to transition into roleplay mode. Do NOT include this marker until the user has confirmed the setup is complete.]`;
-    }
-
-    if (this._active.maxTurns && this._turnCount > 0) {
-      const remaining = this._active.maxTurns - this._turnCount;
-      if (remaining <= 3 && remaining > 0 && this._state === 'roleplay') {
-        prompt += `\n\n[SYSTEM NOTE: Only ${remaining} exchanges remaining. Begin wrapping up the scenario naturally and prepare to transition to coach feedback mode.]`;
-      } else if (remaining <= 0 && this._state === 'feedback') {
-        prompt += `\n\n[SYSTEM NOTE: The scenario has reached its ${this._active.maxTurns}-exchange limit. Switch to coach persona now. Give specific, constructive feedback on what the user did well and what they could improve, referencing actual things they said.]`;
-      }
-    }
-
-    if (this._state === 'feedback') {
-      prompt += `\n\n[SYSTEM NOTE: You are now in COACH MODE. Do not continue the roleplay. Provide feedback: what the user did well, what they could improve, and specific suggestions for practice.]`;
-    }
-
-    return prompt;
+    return this._active?.systemPrompt ?? '';
   }
 
   reset(): void {
     this._turnCount = 0;
-    this._setupComplete = false;
-    this._state = this._active ? 'gathering' : 'idle';
+    if (this._active) {
+      this.initializeState();
+    } else {
+      this._state = 'idle';
+    }
     console.log(`[PersonaEngine] Reset: turns=0, state=${this._state}`);
+    this.onStateChanged?.(this._state, this._turnCount);
+  }
+
+  protected initializeState(): void {
+    this._state = 'active';
+  }
+
+  protected handleTurnRecorded(): void {
+    // Subclasses override for custom turn logic (state transitions, limits, etc.)
+  }
+
+  protected handleExitDetected(phrase: string): void {
+    this.onExitDetected?.(phrase);
+  }
+
+  protected setState(newState: string, reason?: string): void {
+    const prev = this._state;
+    this._state = newState;
+    if (reason) {
+      console.log(`[PersonaEngine] State: ${prev} -> ${newState} (${reason})`);
+    }
     this.onStateChanged?.(this._state, this._turnCount);
   }
 }

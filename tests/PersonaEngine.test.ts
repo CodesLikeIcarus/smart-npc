@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { PersonaEngine, SETUP_COMPLETE_MARKER } from '../src/persona/PersonaEngine.js';
+import { PersonaEngine } from '../src/persona/PersonaEngine.js';
 import { PERSONA_SCENARIO_COACH, PERSONA_ASSISTANT, PERSONA_PRESETS } from '../src/persona/presets.js';
 import type { PersonaDefinition } from '../src/persona/PersonaDefinition.js';
 
@@ -26,10 +26,10 @@ describe('PersonaEngine initialization', () => {
 });
 
 describe('loadPersona', () => {
-  it('sets active persona and resets state', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    expect(engine.active).toBe(PERSONA_SCENARIO_COACH);
-    expect(engine.state).toBe('gathering');
+  it('sets active persona and transitions to active state', () => {
+    engine.loadPersona(PERSONA_ASSISTANT);
+    expect(engine.active).toBe(PERSONA_ASSISTANT);
+    expect(engine.state).toBe('active');
     expect(engine.turnCount).toBe(0);
   });
 
@@ -43,16 +43,16 @@ describe('loadPersona', () => {
   it('fires onStateChanged callback', () => {
     const cb = vi.fn();
     engine.onStateChanged = cb;
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    expect(cb).toHaveBeenCalledWith('gathering', 0);
+    engine.loadPersona(PERSONA_ASSISTANT);
+    expect(cb).toHaveBeenCalledWith('active', 0);
   });
 });
 
 describe('loadPreset', () => {
   it('loads by ID', () => {
-    const result = engine.loadPreset('scenario-coach');
-    expect(result).toBe(PERSONA_SCENARIO_COACH);
-    expect(engine.active).toBe(PERSONA_SCENARIO_COACH);
+    const result = engine.loadPreset('assistant');
+    expect(result).toBe(PERSONA_ASSISTANT);
+    expect(engine.active).toBe(PERSONA_ASSISTANT);
   });
 
   it('returns null for unknown ID', () => {
@@ -62,17 +62,9 @@ describe('loadPreset', () => {
   });
 });
 
-describe('loadDefaultCoach', () => {
-  it('loads the scenario coach preset', () => {
-    const result = engine.loadDefaultCoach();
-    expect(result).toBe(PERSONA_SCENARIO_COACH);
-    expect(engine.active?.id).toBe('scenario-coach');
-  });
-});
-
 describe('unload', () => {
   it('clears active persona and resets to idle', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
+    engine.loadPersona(PERSONA_ASSISTANT);
     engine.unload();
     expect(engine.active).toBeNull();
     expect(engine.state).toBe('idle');
@@ -82,8 +74,8 @@ describe('unload', () => {
 
 describe('getSystemPrompt', () => {
   it('returns active persona system prompt', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    expect(engine.getSystemPrompt()).toContain('scenario-based coach');
+    engine.loadPersona(PERSONA_ASSISTANT);
+    expect(engine.getSystemPrompt()).toContain('friendly and helpful AI assistant');
   });
 
   it('returns empty string when no persona loaded', () => {
@@ -109,109 +101,16 @@ describe('getVoice', () => {
 
 describe('turn tracking', () => {
   it('increments turn count on recordTurn', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
+    engine.loadPersona(PERSONA_ASSISTANT);
     engine.recordTurn();
     expect(engine.turnCount).toBe(1);
     engine.recordTurn();
     expect(engine.turnCount).toBe(2);
   });
 
-  it('does NOT transition from gathering to roleplay on turn count alone', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    expect(engine.state).toBe('gathering');
-    for (let i = 0; i < 5; i++) engine.recordTurn();
-    expect(engine.state).toBe('gathering');
-  });
-
-  it('transitions gathering→roleplay when setup-complete signal received after min turns', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    engine.recordTurn();
-    engine.recordTurn();
-    engine.recordTurn();
-    expect(engine.state).toBe('gathering');
-
-    engine.markSetupComplete();
-    expect(engine.state).toBe('roleplay');
-  });
-
-  it('defers transition if setup-complete signal arrives before min turns', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    engine.recordTurn();
-    engine.markSetupComplete();
-    expect(engine.state).toBe('gathering');
-
-    engine.recordTurn();
-    expect(engine.state).toBe('gathering');
-    engine.recordTurn();
-    expect(engine.state).toBe('roleplay');
-  });
-
-  it('forces roleplay transition at gathering ceiling (10 turns)', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    for (let i = 0; i < 9; i++) engine.recordTurn();
-    expect(engine.state).toBe('gathering');
-    engine.recordTurn();
-    expect(engine.state).toBe('roleplay');
-  });
-
-  it('detects setup-complete marker in LLM response text', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    for (let i = 0; i < 3; i++) engine.recordTurn();
-
-    const detected = engine.checkResponseForSetupSignal(
-      `Great, let me get into character now! ${SETUP_COMPLETE_MARKER}`,
-    );
-    expect(detected).toBe(true);
-    expect(engine.state).toBe('roleplay');
-  });
-
-  it('ignores setup-complete marker when not in gathering state', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    for (let i = 0; i < 3; i++) engine.recordTurn();
-    engine.markSetupComplete();
-    expect(engine.state).toBe('roleplay');
-
-    const detected = engine.checkResponseForSetupSignal(`Something ${SETUP_COMPLETE_MARKER}`);
-    expect(detected).toBe(false);
-  });
-
-  it('returns false when LLM response has no setup marker', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    engine.recordTurn();
-    const detected = engine.checkResponseForSetupSignal('Just a normal response');
-    expect(detected).toBe(false);
-    expect(engine.state).toBe('gathering');
-  });
-
-  it('transitions to feedback when maxTurns reached', () => {
-    const persona: PersonaDefinition = {
-      ...PERSONA_SCENARIO_COACH,
-      maxTurns: 5,
-    };
+  it('reports turnsRemaining correctly with maxTurns', () => {
+    const persona: PersonaDefinition = { ...PERSONA_SCENARIO_COACH, maxTurns: 20 };
     engine.loadPersona(persona);
-    engine.markSetupComplete();
-
-    for (let i = 0; i < 5; i++) engine.recordTurn();
-    expect(engine.state).toBe('feedback');
-    expect(engine.turnCount).toBe(5);
-  });
-
-  it('fires onTurnLimitReached when maxTurns hit', () => {
-    const cb = vi.fn();
-    engine.onTurnLimitReached = cb;
-    const persona: PersonaDefinition = { ...PERSONA_SCENARIO_COACH, maxTurns: 3 };
-    engine.loadPersona(persona);
-    engine.markSetupComplete();
-
-    engine.recordTurn();
-    engine.recordTurn();
-    expect(cb).not.toHaveBeenCalled();
-    engine.recordTurn();
-    expect(cb).toHaveBeenCalledWith(3);
-  });
-
-  it('reports turnsRemaining correctly', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
     expect(engine.turnsRemaining).toBe(20);
     engine.recordTurn();
     expect(engine.turnsRemaining).toBe(19);
@@ -223,7 +122,7 @@ describe('turn tracking', () => {
   });
 
   it('does not go below 0 turnsRemaining', () => {
-    const persona: PersonaDefinition = { ...PERSONA_SCENARIO_COACH, maxTurns: 2 };
+    const persona: PersonaDefinition = { ...PERSONA_ASSISTANT, maxTurns: 2 };
     engine.loadPersona(persona);
     engine.recordTurn();
     engine.recordTurn();
@@ -233,10 +132,9 @@ describe('turn tracking', () => {
 });
 
 describe('exit detection', () => {
-  it('detects exit phrases', () => {
+  it('detects exit phrases and returns true', () => {
     engine.loadPersona(PERSONA_SCENARIO_COACH);
     expect(engine.checkForExit('I want to stop this')).toBe(true);
-    expect(engine.state).toBe('feedback');
   });
 
   it('is case-insensitive', () => {
@@ -252,7 +150,6 @@ describe('exit detection', () => {
   it('does not false-positive on unrelated text', () => {
     engine.loadPersona(PERSONA_SCENARIO_COACH);
     expect(engine.checkForExit('Hello, I am doing great')).toBe(false);
-    expect(engine.state).toBe('gathering');
   });
 
   it('fires onExitDetected callback', () => {
@@ -267,45 +164,19 @@ describe('exit detection', () => {
     engine.loadPersona(PERSONA_ASSISTANT);
     expect(engine.checkForExit('I want to stop this')).toBe(false);
   });
+
+  it('does not change state in base class', () => {
+    engine.loadPersona(PERSONA_SCENARIO_COACH);
+    engine.checkForExit('I want to stop this');
+    expect(engine.state).toBe('active');
+  });
 });
 
 describe('buildTurnAwarePrompt', () => {
-  it('returns base prompt with gathering note early in session', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
+  it('returns base system prompt without augmentation', () => {
+    engine.loadPersona(PERSONA_ASSISTANT);
     const prompt = engine.buildTurnAwarePrompt();
-    expect(prompt).toContain('scenario-based coach');
-    expect(prompt).toContain('SETUP mode');
-    expect(prompt).not.toContain('wrapping up');
-    expect(prompt).not.toContain('COACH MODE');
-  });
-
-  it('adds gathering system note when in gathering state', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    const prompt = engine.buildTurnAwarePrompt();
-    expect(prompt).toContain(SETUP_COMPLETE_MARKER);
-    expect(prompt).toContain('SETUP mode');
-  });
-
-  it('adds wind-down note when 3 turns remaining', () => {
-    const persona: PersonaDefinition = { ...PERSONA_SCENARIO_COACH, maxTurns: 10 };
-    engine.loadPersona(persona);
-    engine.markSetupComplete();
-    for (let i = 0; i < 7; i++) engine.recordTurn();
-
-    const prompt = engine.buildTurnAwarePrompt();
-    expect(prompt).toContain('3 exchanges remaining');
-    expect(prompt).toContain('wrapping up');
-  });
-
-  it('adds feedback note when in feedback state', () => {
-    const persona: PersonaDefinition = { ...PERSONA_SCENARIO_COACH, maxTurns: 5 };
-    engine.loadPersona(persona);
-    engine.markSetupComplete();
-    for (let i = 0; i < 5; i++) engine.recordTurn();
-
-    expect(engine.state).toBe('feedback');
-    const prompt = engine.buildTurnAwarePrompt();
-    expect(prompt).toContain('COACH MODE');
+    expect(prompt).toBe(PERSONA_ASSISTANT.systemPrompt);
   });
 
   it('returns empty string when no persona loaded', () => {
@@ -314,27 +185,73 @@ describe('buildTurnAwarePrompt', () => {
 });
 
 describe('reset', () => {
-  it('resets turn count, setupComplete flag, and state to gathering', () => {
-    engine.loadPersona(PERSONA_SCENARIO_COACH);
-    engine.markSetupComplete();
+  it('resets turn count and state to active when persona loaded', () => {
+    engine.loadPersona(PERSONA_ASSISTANT);
     engine.recordTurn();
     engine.recordTurn();
-    engine.recordTurn();
-    engine.recordTurn();
-    expect(engine.turnCount).toBe(4);
-    expect(engine.state).toBe('roleplay');
+    expect(engine.turnCount).toBe(2);
 
     engine.reset();
     expect(engine.turnCount).toBe(0);
-    expect(engine.state).toBe('gathering');
-
-    for (let i = 0; i < 5; i++) engine.recordTurn();
-    expect(engine.state).toBe('gathering');
+    expect(engine.state).toBe('active');
   });
 
   it('resets to idle when no persona loaded', () => {
     engine.reset();
     expect(engine.state).toBe('idle');
+  });
+});
+
+describe('subclass extension points', () => {
+  it('allows subclass to override initializeState', () => {
+    class CustomEngine extends PersonaEngine {
+      protected override initializeState(): void {
+        this._state = 'custom-init';
+      }
+    }
+    const custom = new CustomEngine();
+    custom.loadPersona(PERSONA_ASSISTANT);
+    expect(custom.state).toBe('custom-init');
+  });
+
+  it('allows subclass to override handleTurnRecorded', () => {
+    let hookCalled = false;
+    class CustomEngine extends PersonaEngine {
+      protected override handleTurnRecorded(): void {
+        hookCalled = true;
+      }
+    }
+    const custom = new CustomEngine();
+    custom.loadPersona(PERSONA_ASSISTANT);
+    custom.recordTurn();
+    expect(hookCalled).toBe(true);
+  });
+
+  it('allows subclass to override handleExitDetected', () => {
+    class CustomEngine extends PersonaEngine {
+      protected override handleExitDetected(phrase: string): void {
+        this.setState('custom-exit');
+        this.onExitDetected?.(phrase);
+      }
+    }
+    const custom = new CustomEngine();
+    custom.loadPersona(PERSONA_SCENARIO_COACH);
+    custom.checkForExit('I want to stop this');
+    expect(custom.state).toBe('custom-exit');
+  });
+
+  it('allows subclass to override buildTurnAwarePrompt', () => {
+    class CustomEngine extends PersonaEngine {
+      override buildTurnAwarePrompt(): string {
+        const base = super.buildTurnAwarePrompt();
+        return base + '\n[CUSTOM AUGMENTATION]';
+      }
+    }
+    const custom = new CustomEngine();
+    custom.loadPersona(PERSONA_ASSISTANT);
+    const prompt = custom.buildTurnAwarePrompt();
+    expect(prompt).toContain(PERSONA_ASSISTANT.systemPrompt);
+    expect(prompt).toContain('[CUSTOM AUGMENTATION]');
   });
 });
 
