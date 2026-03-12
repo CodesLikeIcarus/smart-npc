@@ -812,7 +812,7 @@
           color: rgba(232, 244, 255, 0.8);
        }
        .stt-transcript-log:empty::before {
-          content: 'Transcripts will appear here once STT is enabled and nearby avatars speak...';
+           content: 'Transcripts will appear here when AI mode is active...';
           color: rgba(255,255,255,0.3);
           font-style: italic;
        }
@@ -821,9 +821,29 @@
        .transcript-line.final { color: #00eaff; font-weight: 500; }
        .transcript-line .ts { color: rgba(255,255,255,0.3); margin-right: 8px; font-size: 10px; }
        .transcript-line .confidence { color: rgba(255,255,255,0.25); margin-left: 8px; font-size: 10px; }
-       .transcript-line.ai-response { color: #ff6ecf; font-weight: 500; }
-       .transcript-line .ai-label { color: #ff00cc; font-weight: 700; margin-right: 4px; }
-    </style>
+        .transcript-line.ai-response { color: #ff6ecf; font-weight: 500; }
+        .transcript-line .ai-label { color: #ff00cc; font-weight: 700; margin-right: 4px; }
+
+        #legacy-pipeline-accordion .accordion-button {
+           background: rgba(0,0,0,0.3);
+           color: rgba(232,244,255,0.7);
+           font-size: 13px;
+           padding: 10px 16px;
+           border-radius: 6px;
+           box-shadow: none;
+        }
+        #legacy-pipeline-accordion .accordion-button:not(.collapsed) {
+           background: rgba(0,0,0,0.4);
+           color: #e8f4ff;
+           box-shadow: none;
+        }
+        #legacy-pipeline-accordion .accordion-button::after {
+           filter: invert(0.7);
+        }
+        #legacy-pipeline-accordion .accordion-button:focus {
+           box-shadow: 0 0 0 2px rgba(0,234,255,0.25);
+        }
+     </style>
 </head>
 
 <body>
@@ -1133,92 +1153,116 @@
          </div><!-- /.teleport-panel-inner -->
       </div>
 
-       <!-- STT Transcript Panel -->
+       <!-- Primary: Conversational AI Panel -->
        <div class="stt-transcript-panel" id="stt-transcript-panel">
-           <h5><i class="fa-solid fa-microphone-lines"></i> Speech-to-Text (Nearby Avatars)</h5>
+           <h5><i class="fa-solid fa-brain"></i> Conversational AI</h5>
 
            <div class="stt-controls-row">
-              <button class="btn btn-sm btn-outline-light" id="stt-start-btn">
-                 <i class="fa-solid fa-play"></i> Start Listening
+              <button class="btn btn-sm btn-outline-info" id="ai-toggle-btn">
+                 <i class="fa-solid fa-brain"></i> Enable AI Mode
               </button>
-              <button class="btn btn-sm btn-outline-light" id="stt-stop-btn" disabled>
-                 <i class="fa-solid fa-stop"></i> Stop
+              <span class="stt-connection-status off" id="ai-status-badge" style="font-size: 11px;">Off</span>
+              <span style="font-size: 11px; opacity: 0.5; margin-left: 4px;">OpenAI Realtime API</span>
+              <span class="stt-connection-status off" id="stt-status-badge">Disconnected</span>
+           </div>
+
+           <div style="display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(0,234,255,0.15);">
+              <span style="font-size: 12px; font-weight: 600; color: #00eaff; min-width: 60px;">Persona:</span>
+              <select class="form-select form-select-sm" id="persona-select"
+                 style="max-width: 220px; background: rgba(0,0,0,0.4); color: #e8f4ff; border: 1px solid rgba(0,234,255,0.3); font-size: 12px;">
+                 <option value="scenario-coach">Scenario Coach</option>
+                  <option value="assistant">Virtual Assistant</option>
+                  <option value="hype-goblin">Hype Goblin</option>
+              </select>
+              <button class="btn btn-sm btn-outline-secondary" id="persona-reset-btn" style="font-size: 11px; padding: 3px 10px;">
+                 <i class="fa-solid fa-rotate-right"></i> Reset
               </button>
-              <button class="btn btn-sm btn-outline-secondary" id="stt-clear-log-btn">
+              <span style="font-size: 11px; opacity: 0.6;">State:</span>
+              <span class="stt-connection-status off" id="persona-state" style="font-size: 11px;">Idle</span>
+              <span style="font-size: 11px; opacity: 0.6;">Turns:</span>
+              <span style="font-size: 11px; color: #00eaff; font-family: 'Courier New', monospace;" id="persona-turns">0</span>
+           </div>
+
+           <div style="display: flex; align-items: center; margin-top: 12px; margin-bottom: 4px;">
+              <h6 style="margin: 0; font-size: 13px; color: rgba(232,244,255,0.6);"><i class="fa-solid fa-scroll"></i> Transcript</h6>
+              <button class="btn btn-sm btn-outline-secondary ms-auto" id="stt-clear-log-btn" style="font-size: 11px; padding: 2px 8px;">
                  <i class="fa-solid fa-trash"></i> Clear
               </button>
-              <span class="stt-connection-status off" id="stt-status-badge">Disconnected</span>
            </div>
 
            <div class="stt-transcript-log" id="stt-transcript-log"></div>
         </div>
 
-        <!-- TTS Panel -->
-        <div class="stt-transcript-panel" id="tts-panel" style="margin-top: 16px;">
-           <h5><i class="fa-solid fa-volume-high"></i> Text-to-Speech (Avatar Voice)</h5>
-
-           <div class="stt-controls-row">
-              <button class="btn btn-sm btn-outline-light" id="tts-connect-btn">
-                 <i class="fa-solid fa-plug"></i> Connect TTS
-              </button>
-              <button class="btn btn-sm btn-outline-light" id="tts-disconnect-btn" disabled>
-                 <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
-              </button>
-              <select class="form-select form-select-sm" id="tts-voice-select"
-                 style="max-width: 200px; background: rgba(0,0,0,0.4); color: #e8f4ff; border: 1px solid rgba(0,234,255,0.3); font-size: 12px;">
-                 <option value="aura-2-thalia-en">Thalia (F, American)</option>
-                 <option value="aura-2-aurora-en">Aurora (F, American)</option>
-                 <option value="aura-2-pandora-en">Pandora (F, British)</option>
-                 <option value="aura-2-apollo-en">Apollo (M, American)</option>
-                 <option value="aura-2-arcas-en">Arcas (M, American)</option>
-                 <option value="aura-2-zeus-en">Zeus (M, American)</option>
-                 <option value="aura-2-draco-en">Draco (M, British)</option>
-                 <option value="aura-2-orpheus-en">Orpheus (M, American)</option>
-              </select>
-              <span class="stt-connection-status off" id="tts-status-badge">Disconnected</span>
-           </div>
-
-            <div style="display: flex; gap: 8px; margin-top: 8px;">
-               <input type="text" class="form-control form-control-sm" id="tts-text-input"
-                  placeholder="Type something for the avatar to say..."
-                  style="flex: 1; background: rgba(0,0,0,0.4); color: #e8f4ff; border: 1px solid rgba(0,234,255,0.3); font-size: 13px;">
-               <button class="btn btn-sm btn-outline-light" id="tts-speak-btn" disabled>
-                  <i class="fa-solid fa-play"></i> Speak
-               </button>
-            </div>
-
-             <div style="display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap;">
-                <button class="btn btn-sm btn-outline-warning" id="echo-toggle-btn" disabled>
-                   <i class="fa-solid fa-arrows-rotate"></i> Enable Echo Mode
-                </button>
-                <span class="stt-connection-status off" id="echo-status-badge" style="font-size: 11px;">Off</span>
-                <span style="font-size: 11px; opacity: 0.5; margin-left: 4px;">STT final &rarr; TTS speak</span>
-
-                <span style="opacity: 0.3; margin: 0 4px;">|</span>
-
-                <button class="btn btn-sm btn-outline-info" id="ai-toggle-btn" disabled>
-                   <i class="fa-solid fa-brain"></i> Enable AI Mode
-                </button>
-                <span class="stt-connection-status off" id="ai-status-badge" style="font-size: 11px;">Off</span>
-                 <span style="font-size: 11px; opacity: 0.5; margin-left: 4px;">STT &rarr; LLM &rarr; TTS</span>
-              </div>
-
-              <div style="display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; padding: 10px; background: rgba(0,0,0,0.25); border-radius: 6px; border: 1px solid rgba(0,234,255,0.15);">
-                 <span style="font-size: 12px; font-weight: 600; color: #00eaff; min-width: 60px;">Persona:</span>
-                 <select class="form-select form-select-sm" id="persona-select"
-                    style="max-width: 220px; background: rgba(0,0,0,0.4); color: #e8f4ff; border: 1px solid rgba(0,234,255,0.3); font-size: 12px;">
-                    <option value="scenario-coach">Scenario Coach</option>
-                    <option value="assistant">Virtual Assistant</option>
-                 </select>
-                 <button class="btn btn-sm btn-outline-secondary" id="persona-reset-btn" style="font-size: 11px; padding: 3px 10px;">
-                    <i class="fa-solid fa-rotate-right"></i> Reset
+        <!-- Advanced: Legacy Pipeline (collapsed accordion) -->
+        <div class="accordion" id="legacy-pipeline-accordion" style="margin-top: 16px;">
+           <div class="accordion-item" style="background: transparent; border: 1px solid rgba(0,234,255,0.2); border-radius: 6px;">
+              <h2 class="accordion-header" id="legacy-pipeline-heading">
+                 <button class="accordion-button collapsed" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#legacy-pipeline-collapse"
+                    aria-expanded="false" aria-controls="legacy-pipeline-collapse">
+                    <i class="fa-solid fa-wrench" style="margin-right: 8px; color: rgba(0,234,255,0.5);"></i> Advanced: Legacy Pipeline
                  </button>
-                 <span style="font-size: 11px; opacity: 0.6;">State:</span>
-                 <span class="stt-connection-status off" id="persona-state" style="font-size: 11px;">Idle</span>
-                 <span style="font-size: 11px; opacity: 0.6;">Turns:</span>
-                 <span style="font-size: 11px; color: #00eaff; font-family: 'Courier New', monospace;" id="persona-turns">0</span>
+              </h2>
+              <div id="legacy-pipeline-collapse" class="accordion-collapse collapse"
+                 aria-labelledby="legacy-pipeline-heading" data-bs-parent="#legacy-pipeline-accordion">
+                 <div class="accordion-body" style="background: rgba(0,0,0,0.2); padding: 16px; border-top: 1px solid rgba(0,234,255,0.1);">
+
+                    <!-- STT Controls -->
+                    <h6 style="color: #00eaff; margin-bottom: 8px; font-size: 13px;"><i class="fa-solid fa-microphone-lines"></i> Speech-to-Text</h6>
+                    <div class="stt-controls-row">
+                       <button class="btn btn-sm btn-outline-light" id="stt-start-btn">
+                          <i class="fa-solid fa-play"></i> Start Listening
+                       </button>
+                       <button class="btn btn-sm btn-outline-light" id="stt-stop-btn" disabled>
+                          <i class="fa-solid fa-stop"></i> Stop
+                       </button>
+                    </div>
+
+                    <!-- TTS Controls -->
+                    <h6 style="color: #00eaff; margin-top: 16px; margin-bottom: 8px; font-size: 13px;"><i class="fa-solid fa-volume-high"></i> Text-to-Speech</h6>
+                    <div class="stt-controls-row" id="tts-panel">
+                       <button class="btn btn-sm btn-outline-light" id="tts-connect-btn">
+                          <i class="fa-solid fa-plug"></i> Connect TTS
+                       </button>
+                       <button class="btn btn-sm btn-outline-light" id="tts-disconnect-btn" disabled>
+                          <i class="fa-solid fa-plug-circle-xmark"></i> Disconnect
+                       </button>
+                       <select class="form-select form-select-sm" id="tts-voice-select"
+                          style="max-width: 200px; background: rgba(0,0,0,0.4); color: #e8f4ff; border: 1px solid rgba(0,234,255,0.3); font-size: 12px;">
+                          <option value="aura-2-thalia-en">Thalia (F, American)</option>
+                          <option value="aura-2-aurora-en">Aurora (F, American)</option>
+                          <option value="aura-2-pandora-en">Pandora (F, British)</option>
+                          <option value="aura-2-apollo-en">Apollo (M, American)</option>
+                          <option value="aura-2-arcas-en">Arcas (M, American)</option>
+                          <option value="aura-2-zeus-en">Zeus (M, American)</option>
+                          <option value="aura-2-draco-en">Draco (M, British)</option>
+                          <option value="aura-2-orpheus-en">Orpheus (M, American)</option>
+                       </select>
+                       <span class="stt-connection-status off" id="tts-status-badge">Disconnected</span>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; margin-top: 8px;">
+                       <input type="text" class="form-control form-control-sm" id="tts-text-input"
+                          placeholder="Type something for the avatar to say..."
+                          style="flex: 1; background: rgba(0,0,0,0.4); color: #e8f4ff; border: 1px solid rgba(0,234,255,0.3); font-size: 13px;">
+                       <button class="btn btn-sm btn-outline-light" id="tts-speak-btn" disabled>
+                          <i class="fa-solid fa-play"></i> Speak
+                       </button>
+                    </div>
+
+                    <!-- Echo Mode -->
+                    <div style="display: flex; gap: 8px; margin-top: 12px; align-items: center;">
+                       <button class="btn btn-sm btn-outline-warning" id="echo-toggle-btn" disabled>
+                          <i class="fa-solid fa-arrows-rotate"></i> Enable Echo Mode
+                       </button>
+                       <span class="stt-connection-status off" id="echo-status-badge" style="font-size: 11px;">Off</span>
+                       <span style="font-size: 11px; opacity: 0.5; margin-left: 4px;">STT final &rarr; TTS speak</span>
+                    </div>
+
+                 </div>
               </div>
-          </div>
+           </div>
+        </div>
 
        <div class="card bg-light rounded-5">
           <div class="card-header">

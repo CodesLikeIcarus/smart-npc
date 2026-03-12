@@ -58,7 +58,7 @@ export class OutboundAudioEncoder {
    * @param bufferDurationSec  Ring buffer capacity in seconds of 24 kHz audio.
    *                           Default 5 s = 120 000 samples ≈ 234 KB.
    */
-  constructor(bufferDurationSec = 5) {
+  constructor(bufferDurationSec = 30) {
     this.capacity = Math.ceil(MVRP_RATE * bufferDurationSec);
     this.buffer = new Int16Array(this.capacity);
   }

@@ -166,7 +166,7 @@ describe('buildTurnAwarePrompt', () => {
   it('includes gathering SETUP note when in gathering state', () => {
     engine.loadPersona(PERSONA_SCENARIO_COACH);
     const prompt = engine.buildTurnAwarePrompt();
-    expect(prompt).toContain('scenario-based coach');
+    expect(prompt).toContain('scenario-based roleplay coach');
     expect(prompt).toContain('SETUP mode');
     expect(prompt).toContain(SETUP_COMPLETE_MARKER);
     expect(prompt).not.toContain('wrapping up');

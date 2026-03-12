@@ -216,7 +216,7 @@ export class TTSService {
     this.flushAudioDurationSec += chunkDurationSec;
 
     if (this.chunkCount % 10 === 1) {
-      console.log(
+      console.debug(
         `[TTSService] Audio chunk #${this.chunkCount}: ${pcm16.length} samples ` +
         `(${(chunkDurationSec * 1000).toFixed(0)}ms) | ` +
         `flush total: ${this.flushAudioDurationSec.toFixed(2)}s`
