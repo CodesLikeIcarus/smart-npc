@@ -144,7 +144,7 @@ export class STTService {
     this.totalBytesReceived += pcm.byteLength;
     this.sendCount++;
     if (this.sendCount % 20 === 1) {
-      console.log(
+      console.debug(
         `[STTService] Sent PCM #${this.sendCount} (${pcm.byteLength} bytes) | ` +
         `total=${(this.totalBytesReceived / 1024).toFixed(1)}KB | ws.readyState=${this.ws.readyState}`
       );
@@ -227,7 +227,12 @@ export class STTService {
     }
 
     const type = msg['type'] as string;
-    console.log(`[STTService] ← ${type}${type === 'TurnInfo' ? '.' + (msg['event'] as string) : ''} | seq=${msg['sequence_id'] ?? '?'}`, msg);
+    const label = `${type}${type === 'TurnInfo' ? '.' + (msg['event'] as string) : ''}`;
+    if (type === 'TurnInfo' && msg['event'] === 'Update') {
+      console.debug(`[STTService] ← ${label} | seq=${msg['sequence_id'] ?? '?'}`, msg);
+    } else {
+      console.log(`[STTService] ← ${label} | seq=${msg['sequence_id'] ?? '?'}`, msg);
+    }
 
     switch (type) {
       case 'Connected':

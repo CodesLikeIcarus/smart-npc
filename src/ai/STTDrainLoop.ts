@@ -218,7 +218,7 @@ export class STTDrainLoop {
       }
       const rms = validCount > 0 ? Math.sqrt(sumSq / validCount) : 0;
       const elapsedSec = (performance.now() - this.startTimeMs) / 1000;
-      console.log(
+      console.debug(
         `[STTDrainLoop] #${this.drainCount} (${elapsedSec.toFixed(1)}s) | ` +
         `read=${samplesRead} avail=${available} | ` +
         `pcm=${pcm.byteLength}B total=${(this.totalBytesSent / 1024).toFixed(1)}KB | ` +

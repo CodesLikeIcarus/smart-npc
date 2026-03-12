@@ -36,6 +36,7 @@ export class LLMService {
   private history: ChatMessage[] = [];
   private abortController: AbortController | null = null;
   private _isStreaming = false;
+  private _loggedFirstChunk = false;
   private sentenceBuffer = '';
 
   // ─── Callbacks ─────────────────────────────────────────────────────────
@@ -99,6 +100,7 @@ export class LLMService {
 
     this.abortController = new AbortController();
     this._isStreaming = true;
+    this._loggedFirstChunk = false;
     this.sentenceBuffer = '';
 
     let fullResponse = '';
@@ -115,6 +117,7 @@ export class LLMService {
           messages,
           stream: true,
           temperature: this.opts.temperature,
+          max_completion_tokens: 512,
         }),
         signal: this.abortController.signal,
       });
@@ -150,6 +153,10 @@ export class LLMService {
 
           try {
             const parsed = JSON.parse(data);
+            if (!this._loggedFirstChunk) {
+              console.log('[LLMService] First SSE chunk:', JSON.stringify(parsed).slice(0, 500));
+              this._loggedFirstChunk = true;
+            }
             const delta = parsed.choices?.[0]?.delta?.content;
             if (typeof delta === 'string' && delta.length > 0) {
               fullResponse += delta;

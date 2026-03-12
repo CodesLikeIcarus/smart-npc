@@ -70,6 +70,13 @@ export class ProximityAudioManager {
   private _decodedIsMono: boolean | null = null;
 
   /**
+   * Callback fired once when mono/stereo format is auto-detected on the first
+   * decode call.  Use this to configure downstream consumers (e.g. STTDrainLoop)
+   * without polling.
+   */
+  onFormatDetected?: (isMono: boolean) => void;
+
+  /**
    * @param pLnG  The active pLnG service client from the MSF fabric
    *              (i.e. `getPFabric().pLnG`).  Its `.pClient` property is the
    *              underlying MVIO service connection that the Proximity instance
@@ -110,7 +117,10 @@ export class ProximityAudioManager {
       const mvAudio = this.proximity.GetAudio();
 
       // Start(false) → creates AudioContext without requesting microphone access.
-      // Pass true instead if microphone capture is also required.
+      // IMPORTANT: Start(true) causes Input() to fire on every pTime tick,
+      // sending competing silent UPDATEs that garble our manual Send('UPDATE')
+      // TTS audio.  Start(false) keeps m_pMedia null so Input() returns 0,
+      // making our manual Send() the sole audio source.
       mvAudio.Start(false);
 
       // Build the spatial audio layer on top of the same AudioContext so that
@@ -303,6 +313,7 @@ export class ProximityAudioManager {
             `[ProximityAudioManager] Decode format detected: ${isMono ? 'MONO' : 'STEREO'} | ` +
             `channelData.length=${channelData.length} wSamples=${wSamples} codec=${codecLabel}`
           );
+          this.onFormatDetected?.(isMono);
         }
 
         const validLength = this._decodedIsMono ? wSamples : wSamples * 2;
