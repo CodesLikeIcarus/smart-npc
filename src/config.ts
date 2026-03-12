@@ -55,4 +55,6 @@ export const OpenAIConfig = {
   TEMPERATURE: Number(process.env.OPENAI_TEMPERATURE_DEFAULT ?? '0.7'),
   SYSTEM_PROMPT: process.env.OPENAI_SYSTEM_PROMPT_DEFAULT ??
     'You are a friendly and helpful AI assistant inhabiting an avatar in a virtual world. Keep your responses concise and conversational — typically 1-3 sentences.',
+  REALTIME_MODEL: process.env.OPENAI_REALTIME_MODEL ?? 'gpt-4o-mini-realtime-preview',
+  REALTIME_VOICE: process.env.OPENAI_REALTIME_VOICE ?? 'alloy',
 } as const;

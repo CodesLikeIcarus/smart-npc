@@ -74,6 +74,11 @@ export class PersonaEngine {
     return this._active?.voice ?? 'aura-2-thalia-en';
   }
 
+  /** Display name of the active persona, or 'none'. */
+  get personaName(): string {
+    return this._active?.name ?? 'none';
+  }
+
   recordTurn(): void {
     this._turnCount++;
     this.handleTurnRecorded();
@@ -82,6 +87,11 @@ export class PersonaEngine {
       (this._active?.maxTurns ? `/${this._active.maxTurns}` : '') +
       ` (state: ${this._state})`,
     );
+  }
+
+  /** Alias for {@link recordTurn} — used by Realtime API integration. */
+  advanceTurn(): void {
+    this.recordTurn();
   }
 
   checkForExit(userText: string): boolean {

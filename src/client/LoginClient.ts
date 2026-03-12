@@ -185,6 +185,9 @@ export class LoginClient {
     this.bindSTTControls();
     this.bindTTSControls();
     void this.loadDestinations();
+
+    const aiBtn = this.el<HTMLButtonElement>("ai-toggle-btn");
+    if (aiBtn) aiBtn.disabled = false;
   }
 
   // ─── Event binding ─────────────────────────────────────────────────────────
@@ -668,6 +671,10 @@ export class LoginClient {
 
   private handleTTSDisconnect(): void {
     const inWorld = this.userSession?.personaSession?.inWorld;
+    if (inWorld?.isRealtimeMode) {
+      inWorld.stopRealtime();
+      this.updateAIBadge(false);
+    }
     if (inWorld?.isAIMode) {
       inWorld.setAIMode(false);
       this.updateAIBadge(false);
@@ -759,25 +766,12 @@ export class LoginClient {
       return;
     }
 
-    if (!inWorld.isTTSActive) {
-      this.appendStatus("AI: Connect TTS first.");
-      return;
-    }
+    const turningOn = !inWorld.isRealtimeMode && !inWorld.isAIMode;
 
-    if (!inWorld.isSTTActive) {
-      this.appendStatus("AI: Start STT first.");
-      return;
-    }
-
-    const newState = !inWorld.isAIMode;
-
-    if (newState) {
+    if (turningOn) {
       const select = this.el<HTMLSelectElement>("persona-select");
       const selectedId = select?.value ?? 'scenario-coach';
       const preset = PERSONA_PRESETS.find(p => p.id === selectedId);
-      if (preset) {
-        inWorld.loadPersona(preset);
-      }
 
       inWorld.persona.onStateChanged = (state, turnCount) => {
         this.updatePersonaStatus(state, turnCount);
@@ -789,21 +783,43 @@ export class LoginClient {
         this.appendStatus(`Persona: Turn limit reached (${count}) — switching to feedback`);
       };
 
+      inWorld.onTranscript = (event) => {
+        this.appendTranscript(event.text, event.isFinal, event.confidence);
+      };
       inWorld.onAIResponse = (sentence) => {
         this.appendAITranscript(sentence);
       };
-    }
 
-    inWorld.setAIMode(newState);
-    this.updateAIBadge(newState);
-    if (newState) {
-      this.updateEchoBadge(false);
-      this.updatePersonaStatus('gathering', 0);
+      this.appendStatus('AI: Connecting via Realtime API...');
+      void inWorld.startRealtime(preset ?? undefined).then(() => {
+        this.updateAIBadge(true);
+        this.updateEchoBadge(false);
+        this.updatePersonaStatus('active', 0);
+        this.appendStatus('AI mode: ON (Realtime API)');
+
+        const badge = this.el("stt-status-badge");
+        if (badge) {
+          badge.textContent = "Realtime";
+          badge.className = "stt-connection-status on";
+        }
+      }).catch((err) => {
+        this.appendStatus(`AI Realtime error: ${(err as Error).message}`);
+        this.updateAIBadge(false);
+      });
     } else {
+      inWorld.stopRealtime();
+      inWorld.setAIMode(false);
       inWorld.onAIResponse = null;
+      this.updateAIBadge(false);
       this.updatePersonaStatus('idle', 0);
+      this.appendStatus('AI mode: OFF');
+
+      const badge = this.el("stt-status-badge");
+      if (badge) {
+        badge.textContent = "Disconnected";
+        badge.className = "stt-connection-status off";
+      }
     }
-    this.appendStatus(`AI mode: ${newState ? "ON" : "OFF"}`);
   }
 
   private updateAIBadge(on: boolean): void {
@@ -829,7 +845,13 @@ export class LoginClient {
     const preset = PERSONA_PRESETS.find(p => p.id === personaId);
     if (!preset) return;
 
-    if (inWorld.isAIMode) {
+    if (inWorld.isRealtimeMode) {
+      inWorld.loadPersona(preset);
+      const prompt = inWorld.persona.buildTurnAwarePrompt();
+      inWorld.realtimeService?.updateSession({ instructions: prompt });
+      this.updatePersonaStatus('active', 0);
+      this.appendStatus(`Persona: Switched to "${preset.name}" (Realtime)`);
+    } else if (inWorld.isAIMode) {
       inWorld.loadPersona(preset);
       inWorld.llm?.clearHistory();
       this.updatePersonaStatus('gathering', 0);
@@ -842,9 +864,16 @@ export class LoginClient {
     if (!inWorld) return;
 
     inWorld.persona.reset();
-    inWorld.llm?.clearHistory();
-    const prompt = inWorld.persona.buildTurnAwarePrompt();
-    inWorld.llm?.setSystemPrompt(prompt);
+
+    if (inWorld.isRealtimeMode) {
+      const prompt = inWorld.persona.buildTurnAwarePrompt();
+      inWorld.realtimeService?.updateSession({ instructions: prompt });
+    } else {
+      inWorld.llm?.clearHistory();
+      const prompt = inWorld.persona.buildTurnAwarePrompt();
+      inWorld.llm?.setSystemPrompt(prompt);
+    }
+
     this.updatePersonaStatus(inWorld.persona.state, 0);
     this.appendStatus('Persona: Session reset — starting fresh');
   }

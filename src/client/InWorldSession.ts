@@ -13,6 +13,7 @@ import { LLMService } from "../ai/LLMService.js";
 import { ScenarioCoachEngine, SETUP_COMPLETE_MARKER } from "../persona/ScenarioCoachEngine.js";
 import type { PersonaDefinition } from "../persona/PersonaDefinition.js";
 import { OutboundAudioEncoder, type AudioSlice, SAMPLES_PER_SLICE } from "../audio/OutboundAudioEncoder.js";
+import { RealtimeService } from "../ai/RealtimeService.js";
 import { DeepgramConfig, OpenAIConfig } from "../config.js";
 
 export class InWorldSession extends Session {
@@ -32,7 +33,6 @@ export class InWorldSession extends Session {
   // ─── TTS pipeline ───────────────────────────────────────────────────────
   private ttsService: TTSService | null = null;
   private audioEncoder: OutboundAudioEncoder | null = null;
-  private lastAudioDrainMs = 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private lastPState: any = null;
   private lastCelestialId: string | null = null;
@@ -53,6 +53,12 @@ export class InWorldSession extends Session {
   // ─── Accumulation window (smart pause detection) ──────────────────────
   private _accumulatedText: string[] = [];
   private _accumulationTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // ─── Realtime API (unified STT+LLM+TTS) ──────────────────────────────
+  realtimeService: RealtimeService | null = null;
+  private _realtimeMode = false;
+  private _realtimeDrainTimer: ReturnType<typeof setInterval> | null = null;
+  private _realtimeCapture: AudioFrameCapture | null = null;
 
   onTranscript: ((event: TranscriptEvent) => void) | null = null;
   onEchoFlushed: (() => void) | null = null;
@@ -112,6 +118,7 @@ export class InWorldSession extends Session {
   }
 
   async disconnect(): Promise<void> {
+    this.stopRealtime();
     this.setAIMode(false);
     this.setEchoMode(false);
     this.stopSTT();
@@ -195,20 +202,21 @@ export class InWorldSession extends Session {
     });
     this.sttDrainLoop.start();
 
-    // Poll for mono/stereo auto-detection from the decode interceptor.
-    // Once detected, update the drain loop so prepareForSTT skips stereoToMono if mono.
-    const monoDetectInterval = setInterval(() => {
-      const isMono = this.audioManager?.decodedIsMono;
-      if (isMono !== null && isMono !== undefined) {
+    // Wire mono/stereo detection callback — fires once on first decode call.
+    // Replaces the old polling mechanism which could time out before data arrived.
+    if (this.audioManager) {
+      const alreadyDetected = this.audioManager.decodedIsMono;
+      if (alreadyDetected !== null) {
+        this.sttDrainLoop.isMono = alreadyDetected;
+        console.log(`[InWorldSession] Decode format already known: mono=${alreadyDetected}`);
+      }
+      this.audioManager.onFormatDetected = (isMono: boolean) => {
         if (this.sttDrainLoop) {
           this.sttDrainLoop.isMono = isMono;
           console.log(`[InWorldSession] Decode format applied to drain loop: mono=${isMono}`);
         }
-        clearInterval(monoDetectInterval);
-      }
-    }, 200);
-    // Safety: stop polling after 10s even if no decode happens
-    setTimeout(() => clearInterval(monoDetectInterval), 10000);
+      };
+    }
 
     console.log('[InWorldSession] STT pipeline started');
   }
@@ -483,9 +491,7 @@ export class InWorldSession extends Session {
       console.log(`[InWorldSession] AI response complete (${fullResponse.length} chars)`);
       this._personaEngine.checkResponseForSetupSignal(fullResponse);
       this._llmDone = true;
-      // Single flush for ALL accumulated sentences — avoids EXCESSIVE_FLUSH
       if (this.ttsService?.isConnected && this._ttsSpeaking) {
-        console.log('[InWorldSession] Flushing TTS (single flush for entire response)');
         this.ttsService.flush();
       } else if (!this._ttsSpeaking) {
         this.startAISuppression();
@@ -525,14 +531,14 @@ export class InWorldSession extends Session {
   }
 
   private static readonly ACCUMULATION_DELAYS: Record<string, { withPunctuation: number; withoutPunctuation: number }> = {
-    gathering: { withPunctuation: 1500, withoutPunctuation: 3000 },
+    gathering: { withPunctuation: 500, withoutPunctuation: 1500 },
     roleplay:  { withPunctuation: 300,  withoutPunctuation: 800 },
     feedback:  { withPunctuation: 300,  withoutPunctuation: 600 },
     idle:      { withPunctuation: 300,  withoutPunctuation: 800 },
   };
 
   private static readonly STT_EOT_BY_STATE: Record<string, { eotThreshold: number; eotTimeoutMs: number }> = {
-    gathering: { eotThreshold: 0.85, eotTimeoutMs: 9000 },
+    gathering: { eotThreshold: 0.70, eotTimeoutMs: 5000 },
     roleplay:  { eotThreshold: 0.70, eotTimeoutMs: 4000 },
     feedback:  { eotThreshold: 0.70, eotTimeoutMs: 5000 },
     idle:      { eotThreshold: 0.70, eotTimeoutMs: 5000 },
@@ -543,10 +549,10 @@ export class InWorldSession extends Session {
     if (!event.isFinal) return;
     if (!event.text.trim()) return;
 
-    if (this._ttsSpeaking || this._echoSuppressTimer !== null) {
+    if (this._ttsSpeaking || this._echoSuppressTimer !== null || this.llmService?.isStreaming) {
       console.log(
         `[InWorldSession] AI: skipping "${event.text.slice(0, 40)}" ` +
-        `(speaking=${this._ttsSpeaking}, suppressed=${this._echoSuppressTimer !== null})`,
+        `(speaking=${this._ttsSpeaking}, suppressed=${this._echoSuppressTimer !== null}, llmBusy=${this.llmService?.isStreaming ?? false})`,
       );
       return;
     }
@@ -609,36 +615,27 @@ export class InWorldSession extends Session {
     });
   }
 
+  /**
+   * Suppress STT for a fixed window after TTS flush completes.
+   *
+   * Previously this polled OutboundAudioEncoder until physically drained,
+   * which blocked STT for the entire audio playback duration (up to 18+ seconds
+   * on long responses). The buffer continues draining via onTick() regardless —
+   * we just stop blocking STT input while waiting for it to finish.
+   *
+   * Fixed 5s cap + 1s post-margin = max 6s STT block per turn, regardless of
+   * NPC response length. Accepts minor echo risk for dramatically lower latency.
+   */
   private startAISuppression(): void {
     this._llmDone = false;
     if (this._echoSuppressTimer) clearTimeout(this._echoSuppressTimer);
-    // Set timer immediately so handleAITranscript sees _echoSuppressTimer !== null
-    // during the polling phase. pollDrainThenSuppress will replace it each tick.
-    this._echoSuppressTimer = setTimeout(() => this.pollDrainThenSuppress(), 0);
-  }
 
-  /**
-   * Polls OutboundAudioEncoder until drained, then holds suppression for an
-   * additional 1500ms to cover server round-trip echo latency.
-   *
-   * _echoSuppressTimer remains non-null throughout so handleAITranscript()
-   * continues to skip self-echo transcripts during the entire drain + buffer.
-   */
-  private pollDrainThenSuppress(): void {
-    const buffered = this.audioEncoder?.available ?? 0;
-    if (buffered >= SAMPLES_PER_SLICE) {
-      // Still draining — keep polling every 50ms
-      console.log(`[InWorldSession] AI suppression: draining outbound audio (${buffered} samples buffered)`);
-      this._echoSuppressTimer = setTimeout(() => this.pollDrainThenSuppress(), 50);
-    } else {
-      // Drained — start post-drain echo latency buffer
-      const postDrainMs = 1500;
-      console.log(`[InWorldSession] Outbound audio drained — suppressing STT for ${postDrainMs}ms (echo latency buffer)`);
-      this._echoSuppressTimer = setTimeout(() => {
-        this._echoSuppressTimer = null;
-        console.log('[InWorldSession] AI suppression window ended');
-      }, postDrainMs);
-    }
+    const suppressMs = 500;
+    console.log(`[InWorldSession] AI suppression: fixed ${suppressMs}ms window (buffer drains independently)`);
+    this._echoSuppressTimer = setTimeout(() => {
+      this._echoSuppressTimer = null;
+      console.log('[InWorldSession] AI suppression window ended');
+    }, suppressMs);
   }
 
   private applySTTConfigForState(state: string): void {
@@ -651,52 +648,163 @@ export class InWorldSession extends Session {
     }
   }
 
+  // ─── Realtime API mode (single API replaces STT+LLM+TTS) ─────────────
+
+  get isRealtimeMode(): boolean { return this._realtimeMode; }
+
+  async startRealtime(personaDefinition?: PersonaDefinition): Promise<void> {
+    if (this._realtimeMode) {
+      console.warn('[InWorldSession] Realtime already running');
+      return;
+    }
+
+    const apiKey = OpenAIConfig.API_KEY;
+    if (!apiKey) {
+      throw new Error('No OpenAI API key — set OPENAI_API_KEY in .env');
+    }
+
+    if (!this.audioManager) {
+      throw new Error('Audio manager not available — enter the world first');
+    }
+
+    if (this._aiMode) this.setAIMode(false);
+    if (this._echoMode) this.setEchoMode(false);
+
+    const voiceMap: Record<string, string> = {
+      'aura-2-thalia-en': 'shimmer',
+      'aura-2-apollo-en': 'echo',
+      'aura-2-aurora-en': 'coral',
+      'aura-2-draco-en': 'ash',
+    };
+    const deepgramVoice = personaDefinition?.voice ?? 'aura-2-thalia-en';
+    const realtimeVoice = voiceMap[deepgramVoice] ?? OpenAIConfig.REALTIME_VOICE;
+
+    if (personaDefinition) {
+      this._personaEngine.loadPersona(personaDefinition);
+    } else if (!this._personaEngine.active) {
+      this._personaEngine.loadDefaultCoach();
+    }
+    const instructions = this._personaEngine.buildTurnAwarePrompt();
+
+    this.realtimeService = new RealtimeService({
+      model: OpenAIConfig.REALTIME_MODEL,
+      voice: realtimeVoice,
+      instructions,
+      turnDetection: {
+        type: 'server_vad',
+        threshold: 0.5,
+        prefix_padding_ms: 300,
+        silence_duration_ms: 700,
+      },
+    });
+
+    this.audioEncoder = new OutboundAudioEncoder();
+
+    this.realtimeService.onAudioDelta = (pcm16) => {
+      this.audioEncoder?.pushAudio(pcm16, 24000);
+    };
+
+    this.realtimeService.onUserTranscript = (text, isFinal) => {
+      this.onTranscript?.({ text, isFinal, isInterim: !isFinal, confidence: 1.0 });
+    };
+
+    this.realtimeService.onAssistantTranscript = (text) => {
+      this.onAIResponse?.(text);
+    };
+
+    this.realtimeService.onResponseStart = () => {
+      console.log('[InWorldSession] Realtime: model responding — muting input');
+    };
+
+    this.realtimeService.onResponseDone = () => {
+      this._personaEngine.advanceTurn();
+      const newPrompt = this._personaEngine.buildTurnAwarePrompt();
+      this.realtimeService?.updateSession({ instructions: newPrompt });
+      console.log(`[InWorldSession] Realtime: response done (turn ${this._personaEngine.turnCount})`);
+    };
+
+    this.realtimeService.onError = (err) => {
+      console.error('[InWorldSession] Realtime error:', err.message);
+    };
+
+    await this.realtimeService.connect(apiKey);
+
+    this._realtimeCapture = new AudioFrameCapture(this.audioManager);
+    this.audioManager.registerDecodeCapture(this._realtimeCapture);
+
+    const mvrpRate = this.audioManager.getAudioMetadata()?.sampleRate ?? 24000;
+    const isMono = this.audioManager.decodedIsMono ?? true;
+
+    this._realtimeDrainTimer = setInterval(() => {
+      if (!this._realtimeCapture || !this.realtimeService?.isConnected) return;
+      const buf = this._realtimeCapture.buffer;
+      const available = buf.available;
+      if (available < 960) return;
+
+      const raw = new Float32Array(available);
+      buf.read(raw, available);
+
+      const step = isMono ? (mvrpRate / 24000) : (mvrpRate / 24000) * 2;
+      const outLen = Math.floor(available / step);
+      const pcm16 = new Int16Array(outLen);
+      for (let i = 0; i < outLen; i++) {
+        const srcIdx = Math.floor(i * step);
+        const sample = Math.max(-1, Math.min(1, raw[srcIdx]));
+        pcm16[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      }
+
+      this.realtimeService!.sendAudio(pcm16);
+    }, 100);
+
+    this._realtimeMode = true;
+    console.log(`[InWorldSession] Realtime mode ON — voice: ${realtimeVoice}, model: ${OpenAIConfig.REALTIME_MODEL}`);
+    console.log(`[InWorldSession] Persona: "${this._personaEngine.personaName}"`);
+  }
+
+  stopRealtime(): void {
+    if (this._realtimeDrainTimer) {
+      clearInterval(this._realtimeDrainTimer);
+      this._realtimeDrainTimer = null;
+    }
+
+    if (this._realtimeCapture && this.audioManager) {
+      this.audioManager.unregisterDecodeCapture();
+      this._realtimeCapture = null;
+    }
+
+    if (this.realtimeService) {
+      this.realtimeService.disconnect();
+      this.realtimeService = null;
+    }
+
+    if (this.audioEncoder) {
+      const diag = this.audioEncoder.diagnostics;
+      console.log(`[InWorldSession] Realtime audio stats: pushed=${diag.totalPushed} drained=${diag.totalDrained} overruns=${diag.overruns}`);
+      this.audioEncoder = null;
+    }
+
+    this._realtimeMode = false;
+    console.log('[InWorldSession] Realtime mode OFF');
+  }
+
   private lastServerTime = 0;
 
   onTick(pNotice: any): void {
     this.lastServerTime = pNotice.pData.tmServer;
+    this.pendingAudioSlice = this.drainNextSlice();
     try {
       this.personaSession.onTick();
     } catch (err) {
       console.error('[InWorldSession] onTick delegation error:', err);
     }
-    this.drainOutboundAudio();
+    this.pendingAudioSlice = null;
   }
 
-  private drainOutboundAudio(): void {
-    if (!this.audioEncoder || this.audioEncoder.available < SAMPLES_PER_SLICE) return;
+  private pendingAudioSlice: AudioSlice | null = null;
 
-    const now = performance.now();
-    if (now - this.lastAudioDrainMs < 14.5) return;
-    this.lastAudioDrainMs = now;
-
-    const slice = this.audioEncoder.drainSlice();
-    if (!slice) return;
-    this.sendAudioUpdate(slice);
-  }
-
-  private sendAudioUpdate(slice: AudioSlice): void {
-    if (!this.lastPState) {
-      console.warn('[InWorldSession] Cannot send audio UPDATE — no cached pState (teleportTo not called yet)');
-      return;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pRPersona = this.personaSession.pRPersona as any;
-    if (!pRPersona) return;
-
-    try {
-      pRPersona.Send('UPDATE', {
-        tmStamp: this.lastServerTime || Date.now(),
-        pState: this.lastPState,
-        wSamples: slice.wSamples,
-        wCodec: slice.wCodec,
-        wSize: slice.wSize,
-        abData: slice.abData,
-      });
-    } catch (err) {
-      console.error('[InWorldSession] Audio UPDATE Send failed:', err);
-    }
+  private drainNextSlice(): AudioSlice | null {
+    if (!this.audioEncoder || this.audioEncoder.available < SAMPLES_PER_SLICE) return null;
+    return this.audioEncoder.drainSlice();
   }
 
   public teleportTo(
@@ -790,14 +898,17 @@ export class InWorldSession extends Session {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pRPersona = this.personaSession.pRPersona as any;
+
+    const slice = this.pendingAudioSlice;
+
     try {
       pRPersona.Send('UPDATE', {
         tmStamp: this.lastServerTime || Date.now(),
         pState: this.lastPState,
-        wSamples: 0,
-        wCodec: 0,
-        wSize: 0,
-        abData: new Uint8Array(0),
+        wSamples: slice?.wSamples ?? 0,
+        wCodec: slice?.wCodec ?? 0,
+        wSize: slice?.wSize ?? 0,
+        abData: slice?.abData ?? new Uint8Array(0),
       });
       return true;
     } catch (err) {
