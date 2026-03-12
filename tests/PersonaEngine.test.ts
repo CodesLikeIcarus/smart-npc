@@ -75,7 +75,7 @@ describe('unload', () => {
 describe('getSystemPrompt', () => {
   it('returns active persona system prompt', () => {
     engine.loadPersona(PERSONA_ASSISTANT);
-    expect(engine.getSystemPrompt()).toContain('friendly and helpful AI assistant');
+    expect(engine.getSystemPrompt()).toContain('friendly AI assistant');
   });
 
   it('returns empty string when no persona loaded', () => {
